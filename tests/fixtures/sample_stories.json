@@ -1,0 +1,42 @@
+[
+  {
+    "story_hash": "abc123:feed1",
+    "story_title": "GPT-5 Released: A New Era of Reasoning",
+    "story_permalink": "https://example.com/gpt5-release",
+    "story_content": "<p>OpenAI today announced GPT-5, featuring dramatically improved reasoning capabilities and a 1M token context window. The model demonstrates near-human performance on graduate-level science exams and introduces a novel architecture combining sparse mixture-of-experts with retrieval-augmented generation. Early benchmarks show a 40% improvement over GPT-4 on complex multi-step reasoning tasks.</p><p>\"This represents a fundamental shift in what's possible with language models,\" said CEO Sam Altman during the livestreamed event. Industry analysts predict significant disruption across legal, medical, and scientific research sectors.</p>",
+    "story_date": "2026-02-12 09:30:00",
+    "story_feed_title": "TechCrunch",
+    "story_authors": "Sarah Chen",
+    "intelligence": {"feed": 1, "title": 0, "author": 0, "tags": 0}
+  },
+  {
+    "story_hash": "def456:feed2",
+    "story_title": "New Study Maps Neural Correlates of Conscious Perception",
+    "story_permalink": "https://example.com/consciousness-mapping",
+    "story_content": "<p>Researchers at MIT and the Max Planck Institute have published a landmark study in Nature Neuroscience mapping the neural correlates of conscious perception with unprecedented resolution. Using a combination of high-density EEG, fMRI, and novel decoding algorithms, the team identified a distributed network of cortical regions that activate in a characteristic temporal sequence during the transition from unconscious to conscious processing.</p><p>The findings challenge the dominant Global Workspace Theory by suggesting that consciousness arises from local recurrent processing rather than global broadcast. Lead author Dr. Maria Santos described the results as 'a paradigm shift in our understanding of how the brain generates subjective experience.'</p>",
+    "story_date": "2026-02-11 14:00:00",
+    "story_feed_title": "Quanta Magazine",
+    "story_authors": "James Rivera",
+    "intelligence": {"feed": 1, "title": 1, "author": 0, "tags": 0}
+  },
+  {
+    "story_hash": "ghi789:feed3",
+    "story_title": "Series B: FooBar AI Raises $200M for Enterprise Copilots",
+    "story_permalink": "https://example.com/foobar-funding",
+    "story_content": "<p>FooBar AI, a startup building enterprise copilot tools, announced a $200 million Series B round led by Sequoia Capital. The company's platform allows enterprises to deploy custom AI assistants trained on internal knowledge bases. FooBar reports 300% revenue growth year-over-year and counts 50 Fortune 500 companies as customers.</p>",
+    "story_date": "2026-02-10 11:00:00",
+    "story_feed_title": "VentureBeat",
+    "story_authors": "Kyle Wiggers",
+    "intelligence": {"feed": 0, "title": 0, "author": 0, "tags": 0}
+  },
+  {
+    "story_hash": "jkl012:feed4",
+    "story_title": "Integrated Information Theory 4.0: A Mathematical Framework for Consciousness",
+    "story_permalink": "https://example.com/iit-4",
+    "story_content": "<p>Giulio Tononi and collaborators have released IIT 4.0, a major revision of Integrated Information Theory that addresses long-standing criticisms about computational tractability. The new formulation introduces a hierarchical decomposition algorithm that makes phi calculations feasible for systems with up to 10,000 elements — orders of magnitude beyond previous limits.</p><p>The paper, published in PNAS, also presents new experimental predictions that distinguish IIT from competing theories of consciousness, including Global Workspace Theory and Higher-Order Theories. Several independent labs have already begun designing experiments to test these predictions.</p>",
+    "story_date": "2026-02-09 08:15:00",
+    "story_feed_title": "arXiv Digest",
+    "story_authors": "G. Tononi et al.",
+    "intelligence": {"feed": 1, "title": 0, "author": 1, "tags": 0}
+  }
+]
