@@ -29,11 +29,10 @@ data "aws_iam_policy_document" "dynamodb" {
     actions = [
       "dynamodb:PutItem",
       "dynamodb:GetItem",
-      "dynamodb:Query",
+      "dynamodb:BatchGetItem",
     ]
     resources = [
-      aws_dynamodb_table.classified_stories.arn,
-      "${aws_dynamodb_table.classified_stories.arn}/index/*",
+      aws_dynamodb_table.processing_state.arn,
     ]
   }
 }

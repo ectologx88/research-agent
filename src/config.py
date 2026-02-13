@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     bedrock_model_id: str = "anthropic.claude-3-5-haiku-20241022-v1:0"
 
     # Storage
-    dynamodb_table_name: str = "newsblur-classified-stories"
+    dynamodb_table_name: str = "newsblur-processing-state"
     dynamodb_region: str = "us-east-1"
 
     # Features

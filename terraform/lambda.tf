@@ -27,7 +27,7 @@ resource "aws_lambda_function" "classifier" {
     variables = {
       NEWSBLUR_USERNAME    = "PLACEHOLDER"  # override via SSM or secrets
       NEWSBLUR_PASSWORD    = "PLACEHOLDER"
-      DYNAMODB_TABLE_NAME  = aws_dynamodb_table.classified_stories.name
+      DYNAMODB_TABLE_NAME  = aws_dynamodb_table.processing_state.name
       DYNAMODB_REGION      = "us-east-1"
       BEDROCK_REGION       = "us-east-1"
       BEDROCK_MODEL_ID     = "anthropic.claude-3-5-haiku-20241022-v1:0"
