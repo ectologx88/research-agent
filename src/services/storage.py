@@ -116,7 +116,7 @@ class ProcessingStateStorage:
                         "Retrying unprocessed keys",
                         count=len(unprocessed[self._table_name]["Keys"]),
                         backoff=backoff_seconds,
-                        retry=retry_count,
+                        retry_attempt=retry_count,
                     )
                     time.sleep(backoff_seconds)
                     backoff_seconds = min(backoff_seconds * 2, 5.0)
