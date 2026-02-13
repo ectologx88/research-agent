@@ -100,14 +100,14 @@ class ProcessingStateStorage:
                 unprocessed = resp.get("UnprocessedKeys")
                 if unprocessed and unprocessed.get(self._table_name):
                     request_items = unprocessed
-                    time.sleep(backoff_seconds)
-                    backoff_seconds = min(backoff_seconds * 2, 5.0)
                     log_structured(
                         "WARN",
                         "Retrying unprocessed keys",
                         count=len(unprocessed[self._table_name]["Keys"]),
                         backoff=backoff_seconds,
                     )
+                    time.sleep(backoff_seconds)
+                    backoff_seconds = min(backoff_seconds * 2, 5.0)
                 else:
                     request_items = None
 
