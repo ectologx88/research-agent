@@ -67,26 +67,49 @@ class ProcessingStateStorage:
         """Return the subset of *story_hashes* that already exist in the table.
 
         Processes in chunks of 100 (DynamoDB BatchGetItem limit).
+        Handles UnprocessedKeys with exponential backoff.
         """
         processed: Set[str] = set()
         if not story_hashes:
             return processed
 
+        client = self._dynamo.meta.client
+
         for offset in range(0, len(story_hashes), 100):
             chunk = story_hashes[offset : offset + 100]
             keys = [
-                {"record_type": "story", "identifier": h} for h in chunk
+                {"record_type": {"S": "story"}, "identifier": {"S": h}} for h in chunk
             ]
-            resp = self._dynamo.batch_get_item(
-                RequestItems={
-                    self._table_name: {
-                        "Keys": keys,
-                        "ProjectionExpression": "identifier",
-                    }
+            request_items = {
+                self._table_name: {
+                    "Keys": keys,
+                    "ProjectionExpression": "identifier",
                 }
-            )
-            for item in resp.get("Responses", {}).get(self._table_name, []):
-                processed.add(item["identifier"])
+            }
+
+            # Handle UnprocessedKeys with exponential backoff
+            backoff_seconds = 0.1
+            while request_items:
+                resp = client.batch_get_item(RequestItems=request_items)
+                
+                # Process returned items
+                for item in resp.get("Responses", {}).get(self._table_name, []):
+                    processed.add(item["identifier"]["S"])
+
+                # Check for unprocessed keys
+                unprocessed = resp.get("UnprocessedKeys")
+                if unprocessed and unprocessed.get(self._table_name):
+                    request_items = unprocessed
+                    time.sleep(backoff_seconds)
+                    backoff_seconds = min(backoff_seconds * 2, 5.0)
+                    log_structured(
+                        "WARN",
+                        "Retrying unprocessed keys",
+                        count=len(unprocessed[self._table_name]["Keys"]),
+                        backoff=backoff_seconds,
+                    )
+                else:
+                    request_items = None
 
         return processed
 
