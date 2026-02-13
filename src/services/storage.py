@@ -1,76 +1,27 @@
-"""DynamoDB storage layer for classified stories."""
+"""Minimal DynamoDB storage for deduplication and pipeline state only.
+
+Classifications are processed in-memory — DynamoDB only tracks which
+stories have been seen (with a 3-day TTL) and the last-run timestamp.
+"""
 
 import time
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import List, Optional, Set
 
 import boto3
-from boto3.dynamodb.conditions import Key
 
-from src.models.classification import Classification
-from src.models.story import Story
 from src.utils import log_structured
 
-CONFIG_PK = "__PIPELINE_CONFIG__"
-LAST_RUN_SK = 0
-TTL_DAYS = 90
+TTL_DAYS = 3
 
 
-class ClassificationStorage:
-    """Read/write classified stories and pipeline state in DynamoDB."""
+class ProcessingStateStorage:
+    """Deduplication and state tracking via DynamoDB."""
 
     def __init__(self, table_name: str, region: str = "us-east-1"):
-        dynamo = boto3.resource("dynamodb", region_name=region)
-        self._table = dynamo.Table(table_name)
+        self._dynamo = boto3.resource("dynamodb", region_name=region)
+        self._table = self._dynamo.Table(table_name)
         self._table_name = table_name
-
-    # ------------------------------------------------------------------
-    # Write
-    # ------------------------------------------------------------------
-
-    def store_classification(
-        self, story: Story, classification: Classification
-    ) -> bool:
-        """Persist a classified story. Idempotent on story_hash."""
-        ttl = int(time.time()) + (TTL_DAYS * 86400)
-        date_str = story.story_date.strftime("%Y-%m-%d")
-
-        item = {
-            "story_hash": classification.story_hash,
-            "classified_at": int(classification.classified_at.timestamp()),
-            "story_title": story.story_title,
-            "story_url": str(story.story_permalink),
-            "story_date": story.story_date.isoformat(),
-            "feed_title": story.story_feed_title,
-            "classification": classification.model_dump(mode="json"),
-            "date": date_str,
-            "overall_score": classification.scores.overall,
-            "ttl": ttl,
-        }
-
-        try:
-            self._table.put_item(Item=item)
-            return True
-        except Exception as exc:
-            log_structured(
-                "ERROR",
-                "Failed to store classification",
-                hash=classification.story_hash,
-                error=str(exc),
-            )
-            return False
-
-    # ------------------------------------------------------------------
-    # Read / dedup
-    # ------------------------------------------------------------------
-
-    def story_already_classified(self, story_hash: str) -> bool:
-        resp = self._table.query(
-            KeyConditionExpression=Key("story_hash").eq(story_hash),
-            Limit=1,
-            Select="COUNT",
-        )
-        return resp["Count"] > 0
 
     # ------------------------------------------------------------------
     # Pipeline state
@@ -78,20 +29,20 @@ class ClassificationStorage:
 
     def get_last_run_timestamp(self) -> Optional[datetime]:
         resp = self._table.get_item(
-            Key={"story_hash": CONFIG_PK, "classified_at": LAST_RUN_SK}
+            Key={"record_type": "config", "identifier": "last_run_timestamp"}
         )
         item = resp.get("Item")
-        if not item or "last_run" not in item:
+        if not item or "value" not in item:
             return None
-        return datetime.fromisoformat(item["last_run"])
+        return datetime.fromisoformat(item["value"])
 
     def update_last_run_timestamp(self, ts: datetime) -> bool:
         try:
             self._table.put_item(
                 Item={
-                    "story_hash": CONFIG_PK,
-                    "classified_at": LAST_RUN_SK,
-                    "last_run": ts.isoformat(),
+                    "record_type": "config",
+                    "identifier": "last_run_timestamp",
+                    "value": ts.isoformat(),
                 }
             )
             return True
@@ -102,17 +53,97 @@ class ClassificationStorage:
             return False
 
     # ------------------------------------------------------------------
-    # Query (for downstream / Phase 2)
+    # Deduplication
     # ------------------------------------------------------------------
 
-    def get_classifications_by_date(
-        self, date: str, min_score: int = 8
-    ) -> List[Dict]:
-        """Query the GSI for high-value stories on a given date."""
-        resp = self._table.query(
-            IndexName="classification-by-date",
-            KeyConditionExpression=(
-                Key("date").eq(date) & Key("overall_score").gte(min_score)
-            ),
+    def already_processed(self, story_hash: str) -> bool:
+        resp = self._table.get_item(
+            Key={"record_type": "story", "identifier": story_hash},
+            ProjectionExpression="identifier",
         )
-        return resp.get("Items", [])
+        return "Item" in resp
+
+    def batch_check_processed(self, story_hashes: List[str]) -> Set[str]:
+        """Return the subset of *story_hashes* that already exist in the table.
+
+        Processes in chunks of 100 (DynamoDB BatchGetItem limit).
+        Handles UnprocessedKeys with exponential backoff.
+        """
+        processed: Set[str] = set()
+        if not story_hashes:
+            return processed
+
+        client = self._dynamo.meta.client
+
+        for offset in range(0, len(story_hashes), 100):
+            chunk = story_hashes[offset : offset + 100]
+            keys = [
+                {"record_type": {"S": "story"}, "identifier": {"S": h}} for h in chunk
+            ]
+            request_items = {
+                self._table_name: {
+                    "Keys": keys,
+                    "ProjectionExpression": "identifier",
+                }
+            }
+
+            # Handle UnprocessedKeys with exponential backoff (max 10 retries)
+            backoff_seconds = 0.1
+            max_retries = 10
+            retry_count = 0
+            while request_items:
+                resp = client.batch_get_item(RequestItems=request_items)
+
+                # Process returned items
+                for item in resp.get("Responses", {}).get(self._table_name, []):
+                    processed.add(item["identifier"]["S"])
+
+                # Check for unprocessed keys
+                unprocessed = resp.get("UnprocessedKeys")
+                if unprocessed and unprocessed.get(self._table_name):
+                    retry_count += 1
+                    if retry_count > max_retries:
+                        log_structured(
+                            "ERROR",
+                            "Max retries exceeded for unprocessed keys",
+                            unprocessed_count=len(unprocessed[self._table_name]["Keys"]),
+                            max_retries=max_retries,
+                        )
+                        break
+                    request_items = unprocessed
+                    log_structured(
+                        "WARNING",
+                        "Retrying unprocessed keys",
+                        count=len(unprocessed[self._table_name]["Keys"]),
+                        backoff=backoff_seconds,
+                        retry_attempt=retry_count,
+                    )
+                    time.sleep(backoff_seconds)
+                    backoff_seconds = min(backoff_seconds * 2, 5.0)
+                else:
+                    request_items = None
+
+        return processed
+
+    def mark_processed(self, story_hash: str, overall_score: int) -> bool:
+        """Store a minimal dedup record with 3-day TTL."""
+        ttl = int(time.time()) + (TTL_DAYS * 86400)
+        try:
+            self._table.put_item(
+                Item={
+                    "record_type": "story",
+                    "identifier": story_hash,
+                    "processed_at": datetime.now(timezone.utc).isoformat(),
+                    "overall_score": overall_score,
+                    "ttl": ttl,
+                }
+            )
+            return True
+        except Exception as exc:
+            log_structured(
+                "ERROR",
+                "Failed to mark story processed",
+                hash=story_hash,
+                error=str(exc),
+            )
+            return False

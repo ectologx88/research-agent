@@ -1,34 +1,17 @@
-resource "aws_dynamodb_table" "classified_stories" {
-  name         = "newsblur-classified-stories"
+resource "aws_dynamodb_table" "processing_state" {
+  name         = "newsblur-processing-state"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "story_hash"
-  range_key    = "classified_at"
+  hash_key     = "record_type"
+  range_key    = "identifier"
 
   attribute {
-    name = "story_hash"
+    name = "record_type"
     type = "S"
   }
 
   attribute {
-    name = "classified_at"
-    type = "N"
-  }
-
-  attribute {
-    name = "date"
+    name = "identifier"
     type = "S"
-  }
-
-  attribute {
-    name = "overall_score"
-    type = "N"
-  }
-
-  global_secondary_index {
-    name            = "classification-by-date"
-    hash_key        = "date"
-    range_key       = "overall_score"
-    projection_type = "ALL"
   }
 
   ttl {
@@ -39,5 +22,6 @@ resource "aws_dynamodb_table" "classified_stories" {
   tags = {
     Project = "research-agent"
     Phase   = "1"
+    Purpose = "Minimal deduplication and state tracking"
   }
 }

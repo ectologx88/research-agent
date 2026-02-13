@@ -7,15 +7,15 @@ from src.clients.bedrock import BedrockClassifier
 from src.clients.newsblur import NewsBlurClient
 from src.config import Settings
 from src.services.classifier import ClassificationService
-from src.services.storage import ClassificationStorage
+from src.services.storage import ProcessingStateStorage
 from src.utils import log_structured, timed, utcnow
 
 
 def lambda_handler(event, context):
     """Phase 1: NewsBlur Intelligence Pipeline.
 
-    Fetches unread stories, classifies them via Bedrock, stores results in
-    DynamoDB, and returns an execution summary.
+    Fetches unread stories, classifies them via Bedrock (in-memory),
+    stores only minimal dedup state in DynamoDB, and returns metrics.
 
     Environment variables (see Settings for full list):
         NEWSBLUR_USERNAME, NEWSBLUR_PASSWORD
@@ -39,7 +39,7 @@ def lambda_handler(event, context):
             model_id=settings.bedrock_model_id,
         )
 
-        storage = ClassificationStorage(
+        storage = ProcessingStateStorage(
             table_name=settings.dynamodb_table_name,
             region=settings.dynamodb_region,
         )
@@ -51,12 +51,28 @@ def lambda_handler(event, context):
             settings=settings,
         )
 
-        metrics = service.run()
+        result = service.run()
+
+    # Filter high-value from in-memory results
+    high_value = [
+        (s, c)
+        for s, c in result.classified
+        if c.scores.overall >= settings.threshold_overall
+    ]
+
+    # TODO Phase 2: Send high-value stories to Raindrop
+    # for story, classification in high_value:
+    #     raindrop_client.send_story(story, classification)
+
+    # TODO Phase 2: Generate and send daily brief
+    # brief = generate_daily_brief(result.classified, high_value)
+    # ses_client.send_email(brief)
 
     body = {
         "execution_id": execution_id,
         "timestamp": utcnow().isoformat(),
-        "metrics": dataclasses.asdict(metrics),
+        "metrics": dataclasses.asdict(result.metrics),
+        "high_value_count": len(high_value),
     }
 
     log_structured("INFO", "Pipeline finished", **body)
