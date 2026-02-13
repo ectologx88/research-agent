@@ -18,6 +18,7 @@ class RunMetrics:
     already_processed: int = 0
     stories_classified: int = 0
     classification_failures: int = 0
+    dedup_write_failures: int = 0
     high_value_stories: int = 0
     time_sensitive_stories: int = 0
     execution_time_seconds: float = 0.0
@@ -93,10 +94,17 @@ class ClassificationService:
                 metrics.stories_classified += 1
 
                 # Store only minimal dedup record (not full classification)
-                self._storage.mark_processed(
+                if self._storage.mark_processed(
                     story.story_hash, classification.scores.overall
-                )
-                hashes_to_mark.append(story.story_hash)
+                ):
+                    hashes_to_mark.append(story.story_hash)
+                else:
+                    metrics.dedup_write_failures += 1
+                    log_structured(
+                        "WARNING",
+                        "Failed to mark story as processed",
+                        hash=story.story_hash,
+                    )
 
                 # Track high-value
                 if classification.scores.overall >= self._settings.threshold_overall:
@@ -126,8 +134,23 @@ class ClassificationService:
             self._newsblur.mark_stories_as_read(hashes_to_mark)
             log_structured("INFO", "Marked as read", count=len(hashes_to_mark))
 
-        # 6. Update pipeline state
-        self._storage.update_last_run_timestamp(utcnow())
+        # 6. Update pipeline state (only if run was fully successful)
+        if metrics.classification_failures == 0 and metrics.dedup_write_failures == 0:
+            updated = self._storage.update_last_run_timestamp(utcnow())
+            if updated:
+                log_structured("INFO", "Last run timestamp updated")
+            else:
+                log_structured(
+                    "WARNING",
+                    "Failed to update last run timestamp",
+                )
+        else:
+            log_structured(
+                "WARNING",
+                "Last run timestamp not updated due to failures",
+                classification_failures=metrics.classification_failures,
+                dedup_write_failures=metrics.dedup_write_failures,
+            )
 
         # 7. Build top-stories sample (from in-memory results)
         top = sorted(

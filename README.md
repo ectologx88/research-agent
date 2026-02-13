@@ -93,7 +93,7 @@ The pipeline reads settings from environment variables (Lambda) or a `.env` file
 DynamoDB is used for **minimal state tracking only** — not as a data warehouse.
 
 ### What We Store
-- **Last run timestamp** — when the pipeline last executed successfully
+- **Last run timestamp** — when the pipeline last executed successfully (only updated when there are no classification or deduplication write failures)
 - **Story dedup records** — prevents reprocessing stories within a 3-day window
 
 ### What We DON'T Store

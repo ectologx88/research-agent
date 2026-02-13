@@ -29,6 +29,9 @@ def storage(mock_dynamo, mock_table):
     # Point internal refs at our mocks
     s._dynamo = mock_dynamo
     s._table = mock_table
+    # Mock the client for batch_get_item
+    mock_client = MagicMock()
+    mock_dynamo.meta.client = mock_client
     return s
 
 
@@ -75,11 +78,12 @@ class TestAlreadyProcessed:
 
 class TestBatchCheckProcessed:
     def test_returns_matching_hashes(self, storage, mock_dynamo):
-        mock_dynamo.batch_get_item.return_value = {
+        mock_client = mock_dynamo.meta.client
+        mock_client.batch_get_item.return_value = {
             "Responses": {
                 "test-table": [
-                    {"identifier": "hash1"},
-                    {"identifier": "hash3"},
+                    {"identifier": {"S": "hash1"}},
+                    {"identifier": {"S": "hash3"}},
                 ]
             }
         }
@@ -90,17 +94,64 @@ class TestBatchCheckProcessed:
         assert storage.batch_check_processed([]) == set()
 
     def test_chunks_large_batches(self, storage, mock_dynamo):
-        mock_dynamo.batch_get_item.return_value = {"Responses": {"test-table": []}}
+        mock_client = mock_dynamo.meta.client
+        mock_client.batch_get_item.return_value = {"Responses": {"test-table": []}}
         hashes = [f"hash{i}" for i in range(250)]
         storage.batch_check_processed(hashes)
         # 250 hashes / 100 per chunk = 3 calls
-        assert mock_dynamo.batch_get_item.call_count == 3
+        assert mock_client.batch_get_item.call_count == 3
+
+    def test_handles_unprocessed_keys_with_backoff(self, storage, mock_dynamo):
+        mock_client = mock_dynamo.meta.client
+        # First call returns one item and unprocessed keys, second call completes
+        with patch("src.services.storage.time.sleep") as mock_sleep:
+            mock_client.batch_get_item.side_effect = [
+                {
+                    "Responses": {
+                        "test-table": [{"identifier": {"S": "hash1"}}]
+                    },
+                    "UnprocessedKeys": {
+                        "test-table": {
+                            "Keys": [{"record_type": {"S": "story"}, "identifier": {"S": "hash2"}}]
+                        }
+                    }
+                },
+                {
+                    "Responses": {
+                        "test-table": [{"identifier": {"S": "hash2"}}]
+                    }
+                }
+            ]
+            result = storage.batch_check_processed(["hash1", "hash2"])
+            assert result == {"hash1", "hash2"}
+            assert mock_client.batch_get_item.call_count == 2
+            # Verify sleep was called with initial backoff of 0.1s
+            mock_sleep.assert_called_once_with(0.1)
+
+    def test_stops_after_max_retries(self, storage, mock_dynamo):
+        mock_client = mock_dynamo.meta.client
+        # Always return unprocessed keys to trigger max retry limit
+        with patch("src.services.storage.time.sleep"):
+            mock_client.batch_get_item.return_value = {
+                "Responses": {"test-table": []},
+                "UnprocessedKeys": {
+                    "test-table": {
+                        "Keys": [{"record_type": {"S": "story"}, "identifier": {"S": "hash1"}}]
+                    }
+                }
+            }
+            result = storage.batch_check_processed(["hash1"])
+            # Should return empty set after max retries (11 total calls: 1 initial + 10 retries)
+            assert result == set()
+            assert mock_client.batch_get_item.call_count == 11
 
 
 class TestMarkProcessed:
     def test_stores_minimal_record_with_ttl(self, storage, mock_table):
-        before = int(time.time())
-        assert storage.mark_processed("hash1", 9) is True
+        # Freeze time to avoid flakiness
+        fixed_time = 1000000000
+        with patch("src.services.storage.time.time", return_value=fixed_time):
+            assert storage.mark_processed("hash1", 9) is True
 
         mock_table.put_item.assert_called_once()
         item = mock_table.put_item.call_args[1]["Item"]
@@ -110,10 +161,9 @@ class TestMarkProcessed:
         assert item["overall_score"] == 9
         assert "processed_at" in item
 
-        # TTL should be ~3 days from now
-        expected_min = before + (TTL_DAYS * 86400)
-        expected_max = expected_min + 5  # small tolerance
-        assert expected_min <= item["ttl"] <= expected_max
+        # TTL should be exactly 3 days from frozen time
+        expected_ttl = fixed_time + (TTL_DAYS * 86400)
+        assert item["ttl"] == expected_ttl
 
     def test_returns_false_on_error(self, storage, mock_table):
         mock_table.put_item.side_effect = Exception("write failed")
