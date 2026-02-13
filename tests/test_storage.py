@@ -104,26 +104,46 @@ class TestBatchCheckProcessed:
     def test_handles_unprocessed_keys_with_backoff(self, storage, mock_dynamo):
         mock_client = mock_dynamo.meta.client
         # First call returns one item and unprocessed keys, second call completes
-        mock_client.batch_get_item.side_effect = [
-            {
-                "Responses": {
-                    "test-table": [{"identifier": {"S": "hash1"}}]
+        with patch("src.services.storage.time.sleep") as mock_sleep:
+            mock_client.batch_get_item.side_effect = [
+                {
+                    "Responses": {
+                        "test-table": [{"identifier": {"S": "hash1"}}]
+                    },
+                    "UnprocessedKeys": {
+                        "test-table": {
+                            "Keys": [{"record_type": {"S": "story"}, "identifier": {"S": "hash2"}}]
+                        }
+                    }
                 },
-                "UnprocessedKeys": {
-                    "test-table": {
-                        "Keys": [{"record_type": {"S": "story"}, "identifier": {"S": "hash2"}}]
+                {
+                    "Responses": {
+                        "test-table": [{"identifier": {"S": "hash2"}}]
                     }
                 }
-            },
-            {
-                "Responses": {
-                    "test-table": [{"identifier": {"S": "hash2"}}]
+            ]
+            result = storage.batch_check_processed(["hash1", "hash2"])
+            assert result == {"hash1", "hash2"}
+            assert mock_client.batch_get_item.call_count == 2
+            # Verify sleep was called with initial backoff of 0.1s
+            mock_sleep.assert_called_once_with(0.1)
+
+    def test_stops_after_max_retries(self, storage, mock_dynamo):
+        mock_client = mock_dynamo.meta.client
+        # Always return unprocessed keys to trigger max retry limit
+        with patch("src.services.storage.time.sleep"):
+            mock_client.batch_get_item.return_value = {
+                "Responses": {"test-table": []},
+                "UnprocessedKeys": {
+                    "test-table": {
+                        "Keys": [{"record_type": {"S": "story"}, "identifier": {"S": "hash1"}}]
+                    }
                 }
             }
-        ]
-        result = storage.batch_check_processed(["hash1", "hash2"])
-        assert result == {"hash1", "hash2"}
-        assert mock_client.batch_get_item.call_count == 2
+            result = storage.batch_check_processed(["hash1"])
+            # Should return empty set after max retries (11 total calls: 1 initial + 10 retries)
+            assert result == set()
+            assert mock_client.batch_get_item.call_count == 11
 
 
 class TestMarkProcessed:

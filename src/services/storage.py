@@ -87,11 +87,13 @@ class ProcessingStateStorage:
                 }
             }
 
-            # Handle UnprocessedKeys with exponential backoff
+            # Handle UnprocessedKeys with exponential backoff (max 10 retries)
             backoff_seconds = 0.1
+            max_retries = 10
+            retry_count = 0
             while request_items:
                 resp = client.batch_get_item(RequestItems=request_items)
-                
+
                 # Process returned items
                 for item in resp.get("Responses", {}).get(self._table_name, []):
                     processed.add(item["identifier"]["S"])
@@ -99,12 +101,22 @@ class ProcessingStateStorage:
                 # Check for unprocessed keys
                 unprocessed = resp.get("UnprocessedKeys")
                 if unprocessed and unprocessed.get(self._table_name):
+                    retry_count += 1
+                    if retry_count > max_retries:
+                        log_structured(
+                            "ERROR",
+                            "Max retries exceeded for unprocessed keys",
+                            unprocessed_count=len(unprocessed[self._table_name]["Keys"]),
+                            max_retries=max_retries,
+                        )
+                        break
                     request_items = unprocessed
                     log_structured(
-                        "WARN",
+                        "WARNING",
                         "Retrying unprocessed keys",
                         count=len(unprocessed[self._table_name]["Keys"]),
                         backoff=backoff_seconds,
+                        retry=retry_count,
                     )
                     time.sleep(backoff_seconds)
                     backoff_seconds = min(backoff_seconds * 2, 5.0)

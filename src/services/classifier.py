@@ -101,7 +101,7 @@ class ClassificationService:
                 else:
                     metrics.dedup_write_failures += 1
                     log_structured(
-                        "WARN",
+                        "WARNING",
                         "Failed to mark story as processed",
                         hash=story.story_hash,
                     )
@@ -136,11 +136,17 @@ class ClassificationService:
 
         # 6. Update pipeline state (only if run was fully successful)
         if metrics.classification_failures == 0 and metrics.dedup_write_failures == 0:
-            self._storage.update_last_run_timestamp(utcnow())
-            log_structured("INFO", "Last run timestamp updated")
+            updated = self._storage.update_last_run_timestamp(utcnow())
+            if updated:
+                log_structured("INFO", "Last run timestamp updated")
+            else:
+                log_structured(
+                    "WARNING",
+                    "Failed to update last run timestamp",
+                )
         else:
             log_structured(
-                "WARN",
+                "WARNING",
                 "Last run timestamp not updated due to failures",
                 classification_failures=metrics.classification_failures,
                 dedup_write_failures=metrics.dedup_write_failures,
