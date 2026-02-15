@@ -15,6 +15,7 @@ class TestCheckDuplicate:
         client = self._client()
         with patch.object(client, "_session") as mock_session:
             mock_resp = MagicMock()
+            mock_resp.status_code = 200
             mock_resp.json.return_value = {"result": True, "count": 1, "items": [{"link": "https://example.com/story"}]}
             mock_resp.raise_for_status = MagicMock()
             mock_session.get.return_value = mock_resp
@@ -25,6 +26,7 @@ class TestCheckDuplicate:
         client = self._client()
         with patch.object(client, "_session") as mock_session:
             mock_resp = MagicMock()
+            mock_resp.status_code = 200
             mock_resp.json.return_value = {"result": True, "count": 0, "items": []}
             mock_resp.raise_for_status = MagicMock()
             mock_session.get.return_value = mock_resp
@@ -35,6 +37,19 @@ class TestCheckDuplicate:
         client = self._client()
         assert client.check_duplicate("") is False
 
+    def test_raises_auth_error_on_401(self):
+        client = self._client()
+        with patch.object(client, "_session") as mock_session:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 401
+            mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+                response=mock_resp
+            )
+            mock_session.get.return_value = mock_resp
+
+            with pytest.raises(RaindropAuthError):
+                client.check_duplicate("https://example.com/story")
+
 
 class TestCreateBookmark:
     def _client(self):
@@ -44,6 +59,7 @@ class TestCreateBookmark:
         client = self._client()
         with patch.object(client, "_session") as mock_session:
             mock_resp = MagicMock()
+            mock_resp.status_code = 200
             mock_resp.json.return_value = {"result": True, "item": {"_id": 123}}
             mock_resp.raise_for_status = MagicMock()
             mock_session.post.return_value = mock_resp
@@ -86,11 +102,14 @@ class TestCreateBookmark:
                 response=fail_resp
             )
             ok_resp = MagicMock()
+            ok_resp.status_code = 200
             ok_resp.json.return_value = {"result": True, "item": {"_id": 42}}
             ok_resp.raise_for_status = MagicMock()
             mock_session.post.side_effect = [fail_resp, ok_resp]
 
-            # Patch tenacity to not actually wait
-            with patch("src.clients.raindrop.wait_exponential", return_value=lambda *a, **k: 0):
+            with patch("tenacity.nap.time") as mock_time:
+                mock_time.sleep = MagicMock()
                 result = client.create_bookmark("https://x.com", "T", [], "note")
+
+            assert mock_session.post.call_count == 2
             assert result["_id"] == 42

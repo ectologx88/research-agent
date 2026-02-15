@@ -27,7 +27,6 @@ class RaindropClient:
     BASE_URL = "https://api.raindrop.io/rest/v1"
 
     def __init__(self, token: str, collection_id: int = -1, base_url: str | None = None):
-        self._token = token
         self._collection_id = collection_id
         self._base = (base_url or self.BASE_URL).rstrip("/")
         self._session = requests.Session()
@@ -43,9 +42,11 @@ class RaindropClient:
             return False
         resp = self._session.get(
             f"{self._base}/raindrops/{self._collection_id}",
-            params={"search": url, "perpage": 1},
+            params={"search": f"link:{url}", "perpage": 1},
             timeout=15,
         )
+        if resp.status_code == 401:
+            raise RaindropAuthError("Raindrop token invalid or expired (401)")
         resp.raise_for_status()
         data = resp.json()
         return data.get("count", 0) > 0
