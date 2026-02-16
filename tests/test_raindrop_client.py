@@ -154,3 +154,34 @@ class TestCreateBookmark:
 
             assert mock_session.post.call_count == 2
             assert result["_id"] == 42
+
+
+class TestUpdateBookmark:
+    def _client(self):
+        return RaindropClient(token="tok", collection_id=99)
+
+    def test_sends_put_with_note(self):
+        client = self._client()
+        with patch.object(client, "_session") as mock_session:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"result": True, "item": {"_id": 123}}
+            mock_resp.raise_for_status = MagicMock()
+            mock_session.put.return_value = mock_resp
+
+            result = client.update_bookmark(raindrop_id=123, note="Summary text here.")
+
+            call_kwargs = mock_session.put.call_args
+            assert "/raindrop/123" in call_kwargs[0][0]
+            assert call_kwargs[1]["json"]["note"] == "Summary text here."
+            assert result["_id"] == 123
+
+    def test_raises_auth_error_on_401(self):
+        client = self._client()
+        with patch.object(client, "_session") as mock_session:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 401
+            mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_resp)
+            mock_session.put.return_value = mock_resp
+            with pytest.raises(RaindropAuthError):
+                client.update_bookmark(raindrop_id=123, note="text")
