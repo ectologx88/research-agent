@@ -73,16 +73,13 @@ class ProcessingStateStorage:
         if not story_hashes:
             return processed
 
-        client = self._dynamo.meta.client
-
         for offset in range(0, len(story_hashes), 100):
             chunk = story_hashes[offset : offset + 100]
-            keys = [
-                {"record_type": {"S": "story"}, "identifier": {"S": h}} for h in chunk
-            ]
             request_items = {
                 self._table_name: {
-                    "Keys": keys,
+                    "Keys": [
+                        {"record_type": "story", "identifier": h} for h in chunk
+                    ],
                     "ProjectionExpression": "identifier",
                 }
             }
@@ -92,11 +89,11 @@ class ProcessingStateStorage:
             max_retries = 10
             retry_count = 0
             while request_items:
-                resp = client.batch_get_item(RequestItems=request_items)
+                resp = self._dynamo.batch_get_item(RequestItems=request_items)
 
                 # Process returned items
                 for item in resp.get("Responses", {}).get(self._table_name, []):
-                    processed.add(item["identifier"]["S"])
+                    processed.add(item["identifier"])
 
                 # Check for unprocessed keys
                 unprocessed = resp.get("UnprocessedKeys")

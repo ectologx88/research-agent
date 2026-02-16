@@ -12,12 +12,32 @@ provider "aws" {
   profile = "seth-dev"
 }
 
+data "aws_ssm_parameter" "newsblur_user" {
+  name            = "/prod/ResearchAgent/NewsBlur_User"
+  with_decryption = true
+}
+
+data "aws_ssm_parameter" "newsblur_pass" {
+  name            = "/prod/ResearchAgent/NewsBlur_Pass"
+  with_decryption = true
+}
+
+data "aws_ssm_parameter" "raindrop_token" {
+  name            = "/prod/ResearchAgent/Raindrop_Token"
+  with_decryption = true
+}
+
+data "aws_ssm_parameter" "raindrop_briefing_collection_id" {
+  name            = "/prod/ResearchAgent/Raindrop_Briefing_Collection_Id"
+  with_decryption = false
+}
+
 resource "aws_lambda_function" "classifier" {
   function_name = "research-agent-classifier"
   role          = aws_iam_role.lambda.arn
   handler       = "src.lambda_handler.lambda_handler"
   runtime       = "python3.12"
-  timeout       = 300
+  timeout       = 900
   memory_size   = 256
 
   filename         = "${path.module}/../dist/lambda.zip"
@@ -25,13 +45,18 @@ resource "aws_lambda_function" "classifier" {
 
   environment {
     variables = {
-      NEWSBLUR_USERNAME    = "PLACEHOLDER"  # override via SSM or secrets
-      NEWSBLUR_PASSWORD    = "PLACEHOLDER"
+      NEWSBLUR_USERNAME    = data.aws_ssm_parameter.newsblur_user.value
+      NEWSBLUR_PASSWORD    = data.aws_ssm_parameter.newsblur_pass.value
+      RAINDROP_TOKEN       = data.aws_ssm_parameter.raindrop_token.value
       DYNAMODB_TABLE_NAME  = aws_dynamodb_table.processing_state.name
       DYNAMODB_REGION      = "us-east-1"
       BEDROCK_REGION       = "us-east-1"
-      BEDROCK_MODEL_ID     = "anthropic.claude-3-5-haiku-20241022-v1:0"
-      MAX_STORIES_PER_RUN  = "100"
+      BEDROCK_MODEL_ID     = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+      FETCH_STRATEGY       = "hours_back"
+      HOURS_BACK_DEFAULT   = "12"
+      MAX_STORIES_PER_RUN             = "200"
+      BEDROCK_BRIEFING_MODEL_ID       = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      RAINDROP_BRIEFING_COLLECTION_ID = data.aws_ssm_parameter.raindrop_briefing_collection_id.value
       NEWSBLUR_MIN_SCORE   = "0"
       MARK_AS_READ         = "false"
     }
@@ -39,7 +64,7 @@ resource "aws_lambda_function" "classifier" {
 
   tags = {
     Project = "research-agent"
-    Phase   = "1"
+    Phase   = "2b"
   }
 }
 
@@ -52,10 +77,10 @@ resource "aws_cloudwatch_log_group" "classifier" {
   }
 }
 
-# Optional: schedule the pipeline to run every 12 hours
+# Schedule: 6 AM and 6 PM US Central (11:00 and 23:00 UTC)
 resource "aws_cloudwatch_event_rule" "schedule" {
   name                = "research-agent-schedule"
-  schedule_expression = "rate(12 hours)"
+  schedule_expression = "cron(0 11,23 * * ? *)"
 
   tags = {
     Project = "research-agent"

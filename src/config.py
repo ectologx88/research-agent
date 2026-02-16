@@ -34,3 +34,9 @@ class Settings(BaseSettings):
     # Raindrop
     raindrop_token: str = ""
     raindrop_collection_id: int = -1  # -1 = Raindrop "Unsorted"
+    raindrop_briefing_collection_id: int = -1  # collection for briefing bookmarks
+
+    # Briefing synthesis
+    bedrock_briefing_model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    briefing_prefilter_domain_min: int = 5
+    briefing_prefilter_importance_min: int = 6
