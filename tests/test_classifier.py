@@ -51,7 +51,7 @@ class TestClassifyStory:
         classifier = BedrockClassifier.__new__(BedrockClassifier)
         classifier._model_id = "test-model"
 
-        fenced = '```json\n{"scores":{"ai_ml":5,"neuroscience":1,"theory":1,"content_craft":5,"overall":4},"content_type":"industry","actionability":["time_sensitive"],"concepts":["funding","enterprise AI"],"why_matters":"Another funding round.","summary":"A startup raised money."}\n```'
+        fenced = '```json\n{"scores":{"ai_ml":5,"neuroscience":1,"theory":1,"content_craft":5,"overall":4,"importance":5},"content_type":"industry","actionability":["time_sensitive"],"concepts":["funding","enterprise AI"],"why_matters":"Another funding round.","summary":"A startup raised money.","taxonomy_tags":[],"priority_flag":null}\n```'
 
         with patch.object(classifier, "_invoke", return_value=fenced):
             result = classifier.classify_story(story)

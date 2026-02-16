@@ -24,6 +24,7 @@ def sample_bedrock_response() -> str:
                 "theory": 3,
                 "content_craft": 7,
                 "overall": 8,
+                "importance": 7,
             },
             "content_type": "breaking_news",
             "actionability": ["citation_worthy", "time_sensitive"],
@@ -35,5 +36,7 @@ def sample_bedrock_response() -> str:
             ],
             "why_matters": "A new frontier model with dramatically improved reasoning sets the stage for disruption across knowledge-work industries.",
             "summary": "OpenAI released GPT-5 with a 1M-token context window and near-human graduate-level science performance. The architecture combines sparse MoE with RAG, yielding a 40% reasoning improvement over GPT-4.",
+            "taxonomy_tags": ["#ai-research"],
+            "priority_flag": "⚡",
         }
     )
