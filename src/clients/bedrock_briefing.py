@@ -114,7 +114,8 @@ class BedrockBriefingClient:
             raise BriefingError("Cannot synthesize briefing: no stories provided")
 
         time_of_day = "morning" if run_hour_utc < 18 else "evening"
-        date_str = datetime.now(timezone.utc).strftime("%B %-d, %Y")
+        now = datetime.now(timezone.utc)
+        date_str = f"{now.strftime('%B')} {now.day}, {now.year}"
 
         story_list = self._format_stories(stories)
         user_prompt = BRIEFING_PROMPT_TEMPLATE.format(

@@ -30,19 +30,17 @@ def test_raindrop_custom_aiml_collection(monkeypatch):
 
 
 def test_raindrop_briefing_collection_id_default(monkeypatch):
-    import os
     monkeypatch.setenv("NEWSBLUR_USERNAME", "u")
     monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
-    os.environ.pop("RAINDROP_BRIEFING_COLLECTION_ID", None)
+    monkeypatch.delenv("RAINDROP_BRIEFING_COLLECTION_ID", raising=False)
     s = Settings()
     assert s.raindrop_briefing_collection_id == -1
 
 
 def test_bedrock_briefing_model_id_default(monkeypatch):
-    import os
     monkeypatch.setenv("NEWSBLUR_USERNAME", "u")
     monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
-    os.environ.pop("BEDROCK_BRIEFING_MODEL_ID", None)
+    monkeypatch.delenv("BEDROCK_BRIEFING_MODEL_ID", raising=False)
     s = Settings()
     assert s.bedrock_briefing_model_id == "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
