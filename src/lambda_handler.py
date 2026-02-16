@@ -5,6 +5,7 @@ import uuid
 
 from src.clients.bedrock import BedrockClassifier
 from src.clients.newsblur import NewsBlurClient
+from src.clients.raindrop import RaindropAuthError, RaindropClient
 from src.config import Settings
 from src.services.classifier import ClassificationService
 from src.services.storage import ProcessingStateStorage
@@ -12,25 +13,17 @@ from src.utils import log_structured, timed, utcnow
 
 
 def lambda_handler(event, context):
-    """Phase 1: NewsBlur Intelligence Pipeline.
+    """Phase 1+2a: NewsBlur Intelligence Pipeline with Raindrop bookmarking.
 
-    Fetches unread stories, classifies them via Bedrock (in-memory),
-    stores only minimal dedup state in DynamoDB, and returns metrics.
-
-    Environment variables (see Settings for full list):
-        NEWSBLUR_USERNAME, NEWSBLUR_PASSWORD
-        DYNAMODB_TABLE_NAME, DYNAMODB_REGION
-        BEDROCK_REGION, BEDROCK_MODEL_ID
-        MAX_STORIES_PER_RUN, NEWSBLUR_MIN_SCORE
-        MARK_AS_READ
+    Fetches unread stories, classifies them via Bedrock, deduplicates via
+    DynamoDB, bookmarks high-value stories to Raindrop, and returns metrics.
     """
     execution_id = str(uuid.uuid4())
-    settings = Settings()  # reads from env / .env
+    settings = Settings()
 
     log_structured("INFO", "Pipeline starting", execution_id=execution_id)
 
     with timed("Full pipeline"):
-        # Wire up dependencies
         newsblur = NewsBlurClient(settings.newsblur_username, settings.newsblur_password)
         newsblur.authenticate()
 
@@ -53,26 +46,71 @@ def lambda_handler(event, context):
 
         result = service.run()
 
-    # Filter high-value from in-memory results
+    # Filter high-value stories
     high_value = [
         (s, c)
         for s, c in result.classified
         if c.scores.overall >= settings.threshold_overall
     ]
 
-    # TODO Phase 2: Send high-value stories to Raindrop
-    # for story, classification in high_value:
-    #     raindrop_client.send_story(story, classification)
+    # Phase 2a: Bookmark high-value stories to Raindrop
+    raindrop_sent = 0
+    raindrop_skipped = 0
 
-    # TODO Phase 2: Generate and send daily brief
-    # brief = generate_daily_brief(result.classified, high_value)
-    # ses_client.send_email(brief)
+    if settings.raindrop_token:
+        raindrop = RaindropClient(
+            token=settings.raindrop_token,
+            collection_id=settings.raindrop_collection_id,
+        )
+        auth_failed = False
+
+        for story, classification in high_value:
+            if auth_failed:
+                break
+            if not story.story_permalink:
+                log_structured("WARNING", "Skipping story with no URL", title=story.story_title)
+                raindrop_skipped += 1
+                continue
+
+            try:
+                if raindrop.check_duplicate(story.story_permalink):
+                    log_structured("INFO", "Raindrop duplicate skipped", url=story.story_permalink)
+                    raindrop_skipped += 1
+                    continue
+
+                raindrop.create_bookmark(
+                    url=story.story_permalink,
+                    title=story.story_title,
+                    tags=classification.concepts,
+                    note=classification.why_matters,
+                )
+                raindrop_sent += 1
+
+            except RaindropAuthError as exc:
+                log_structured("ERROR", "Raindrop auth failed — stopping", error=str(exc))
+                auth_failed = True
+                raindrop_skipped += len(high_value) - raindrop_sent - raindrop_skipped
+
+            except Exception as exc:
+                log_structured(
+                    "WARNING",
+                    "Raindrop bookmark failed after retries",
+                    url=story.story_permalink,
+                    error=str(exc),
+                )
+                raindrop_skipped += 1
+    else:
+        log_structured("INFO", "Raindrop token not configured, skipping")
+
+    # TODO Phase 2b: Generate and send daily brief via SES
 
     body = {
         "execution_id": execution_id,
         "timestamp": utcnow().isoformat(),
         "metrics": dataclasses.asdict(result.metrics),
         "high_value_count": len(high_value),
+        "raindrop_sent": raindrop_sent,
+        "raindrop_skipped": raindrop_skipped,
     }
 
     log_structured("INFO", "Pipeline finished", **body)

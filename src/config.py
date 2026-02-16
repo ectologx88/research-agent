@@ -30,3 +30,7 @@ class Settings(BaseSettings):
     # Classification thresholds (for metrics / logging)
     threshold_overall: int = 8
     threshold_dimension: int = 9
+
+    # Raindrop
+    raindrop_token: str = ""
+    raindrop_collection_id: int = -1  # -1 = Raindrop "Unsorted"
