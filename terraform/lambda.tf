@@ -77,7 +77,7 @@ resource "aws_cloudwatch_log_group" "classifier" {
   }
 }
 
-# Optional: schedule the pipeline to run every 12 hours
+# Schedule: 6 AM and 6 PM US Central (11:00 and 23:00 UTC)
 resource "aws_cloudwatch_event_rule" "schedule" {
   name                = "research-agent-schedule"
   schedule_expression = "cron(0 11,23 * * ? *)"
