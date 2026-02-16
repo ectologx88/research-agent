@@ -78,12 +78,11 @@ class TestAlreadyProcessed:
 
 class TestBatchCheckProcessed:
     def test_returns_matching_hashes(self, storage, mock_dynamo):
-        mock_client = mock_dynamo.meta.client
-        mock_client.batch_get_item.return_value = {
+        mock_dynamo.batch_get_item.return_value = {
             "Responses": {
                 "test-table": [
-                    {"identifier": {"S": "hash1"}},
-                    {"identifier": {"S": "hash3"}},
+                    {"identifier": "hash1"},
+                    {"identifier": "hash3"},
                 ]
             }
         }
@@ -94,56 +93,53 @@ class TestBatchCheckProcessed:
         assert storage.batch_check_processed([]) == set()
 
     def test_chunks_large_batches(self, storage, mock_dynamo):
-        mock_client = mock_dynamo.meta.client
-        mock_client.batch_get_item.return_value = {"Responses": {"test-table": []}}
+        mock_dynamo.batch_get_item.return_value = {"Responses": {"test-table": []}}
         hashes = [f"hash{i}" for i in range(250)]
         storage.batch_check_processed(hashes)
         # 250 hashes / 100 per chunk = 3 calls
-        assert mock_client.batch_get_item.call_count == 3
+        assert mock_dynamo.batch_get_item.call_count == 3
 
     def test_handles_unprocessed_keys_with_backoff(self, storage, mock_dynamo):
-        mock_client = mock_dynamo.meta.client
         # First call returns one item and unprocessed keys, second call completes
         with patch("src.services.storage.time.sleep") as mock_sleep:
-            mock_client.batch_get_item.side_effect = [
+            mock_dynamo.batch_get_item.side_effect = [
                 {
                     "Responses": {
-                        "test-table": [{"identifier": {"S": "hash1"}}]
+                        "test-table": [{"identifier": "hash1"}]
                     },
                     "UnprocessedKeys": {
                         "test-table": {
-                            "Keys": [{"record_type": {"S": "story"}, "identifier": {"S": "hash2"}}]
+                            "Keys": [{"record_type": "story", "identifier": "hash2"}]
                         }
                     }
                 },
                 {
                     "Responses": {
-                        "test-table": [{"identifier": {"S": "hash2"}}]
+                        "test-table": [{"identifier": "hash2"}]
                     }
                 }
             ]
             result = storage.batch_check_processed(["hash1", "hash2"])
             assert result == {"hash1", "hash2"}
-            assert mock_client.batch_get_item.call_count == 2
+            assert mock_dynamo.batch_get_item.call_count == 2
             # Verify sleep was called with initial backoff of 0.1s
             mock_sleep.assert_called_once_with(0.1)
 
     def test_stops_after_max_retries(self, storage, mock_dynamo):
-        mock_client = mock_dynamo.meta.client
         # Always return unprocessed keys to trigger max retry limit
         with patch("src.services.storage.time.sleep"):
-            mock_client.batch_get_item.return_value = {
+            mock_dynamo.batch_get_item.return_value = {
                 "Responses": {"test-table": []},
                 "UnprocessedKeys": {
                     "test-table": {
-                        "Keys": [{"record_type": {"S": "story"}, "identifier": {"S": "hash1"}}]
+                        "Keys": [{"record_type": "story", "identifier": "hash1"}]
                     }
                 }
             }
             result = storage.batch_check_processed(["hash1"])
             # Should return empty set after max retries (11 total calls: 1 initial + 10 retries)
             assert result == set()
-            assert mock_client.batch_get_item.call_count == 11
+            assert mock_dynamo.batch_get_item.call_count == 11
 
 
 class TestMarkProcessed:
