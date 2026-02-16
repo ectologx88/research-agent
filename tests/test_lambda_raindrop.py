@@ -262,3 +262,50 @@ def test_story_with_no_url_skipped(
     assert response["body"]["raindrop_sent"] == 1
     assert response["body"]["raindrop_skipped"] == 1
 
+
+@patch("src.lambda_handler.RaindropClient")
+@patch("src.lambda_handler.ClassificationService")
+@patch("src.lambda_handler.ProcessingStateStorage")
+@patch("src.lambda_handler.BedrockClassifier")
+@patch("src.lambda_handler.NewsBlurClient")
+@patch("src.lambda_handler.Settings")
+def test_auth_failure_after_duplicate_counts_correctly(
+    mock_settings_cls, mock_nb_cls, mock_bedrock_cls,
+    mock_storage_cls, mock_svc_cls, mock_raindrop_cls
+):
+    """Test that auth failure correctly counts remaining stories when some were already skipped."""
+    settings = MagicMock()
+    settings.threshold_overall = 8
+    settings.raindrop_token = "tok"
+    settings.raindrop_collection_id = -1
+    mock_settings_cls.return_value = settings
+
+    # 3 stories: first is duplicate, second fails auth, third never processed
+    story1 = _make_story(url="https://example.com/1")
+    story2 = _make_story(url="https://example.com/2")
+    story3 = _make_story(url="https://example.com/3")
+    c1 = _make_classification(overall=9)
+    c2 = _make_classification(overall=9)
+    c3 = _make_classification(overall=9)
+    result = MagicMock()
+    result.classified = [(story1, c1), (story2, c2), (story3, c3)]
+    result.metrics = MagicMock()
+    mock_svc_cls.return_value.run.return_value = result
+
+    from src.clients.raindrop import RaindropAuthError
+    raindrop_instance = MagicMock()
+    # First story is duplicate, second story fails auth
+    raindrop_instance.check_duplicate.side_effect = [True, RaindropAuthError("token expired")]
+    mock_raindrop_cls.return_value = raindrop_instance
+
+    with patch("dataclasses.asdict", return_value={}):
+        from src import lambda_handler
+        response = lambda_handler.lambda_handler({}, {})
+
+    # Two check_duplicate calls (first succeeds as duplicate, second fails auth)
+    assert raindrop_instance.check_duplicate.call_count == 2
+    assert raindrop_instance.create_bookmark.call_count == 0
+    assert response["body"]["raindrop_sent"] == 0
+    # All 3 stories should be counted as skipped (1 duplicate + 2 from auth failure)
+    assert response["body"]["raindrop_skipped"] == 3
+
