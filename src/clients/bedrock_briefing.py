@@ -6,9 +6,25 @@ from datetime import datetime, timezone
 import boto3
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from src.models.classification import Classification, TaxonomyTag, PriorityFlag
-from src.models.story import Story
-from typing import List, Tuple
+from typing import List
+
+WORLD_SYSTEM_PROMPT = """You are a concise daily briefing editor producing a morning/evening digest
+for an informed, curious reader. Cover world events, science, tech culture, and weather.
+Be direct, accessible, and brief. Prioritize what matters most today."""
+
+WORLD_BRIEFING_SECTIONS = """\
+## Top Stories
+The 3–5 most important world and national stories today.
+
+## Science & Discovery
+Notable science findings or research worth knowing.
+
+## Tech & Geek Culture
+Interesting tech news, culture, and developments.
+
+## Local & Weather
+Local news and weather patterns of note.
+"""
 
 SETH_SYSTEM_PROMPT = """\
 You are an intelligence analyst writing a personal briefing for Seth Holloway.
@@ -79,14 +95,17 @@ class BedrockBriefingClient:
 
     def synthesize(
         self,
-        stories: List[Tuple[Story, Classification]],
+        stories: List[dict],
         run_hour_utc: int,
+        briefing_type: str = "ai-ml",
     ) -> str:
         """Return briefing text for the given stories.
 
         Args:
-            stories: Pre-filtered (Story, Classification) pairs.
+            stories: Pre-filtered story dicts from SQS (Phase 3 format) with keys:
+                title, url, summary, why_matters, score, sub_bucket, feed_title.
             run_hour_utc: UTC hour of the Lambda invocation (determines morning/evening label).
+            briefing_type: "ai-ml" for Seth's AI/ML briefing, "world" for world digest.
 
         Raises:
             BriefingError: If stories is empty or Bedrock call fails.
@@ -106,18 +125,18 @@ class BedrockBriefingClient:
             story_list=story_list,
         )
 
+        if briefing_type == "world":
+            return self._invoke(WORLD_SYSTEM_PROMPT, user_prompt)
         return self._invoke(SETH_SYSTEM_PROMPT, user_prompt)
 
-    def _format_stories(self, stories: List[Tuple[Story, Classification]]) -> str:
+    def _format_stories(self, stories: List[dict]) -> str:
         lines = []
-        for i, (story, c) in enumerate(stories, 1):
-            tags = " ".join(t.value for t in c.taxonomy_tags)
-            flag = c.priority_flag.value if c.priority_flag else ""
+        for i, story in enumerate(stories, 1):
             lines.append(
-                f"{i}. [{flag}{tags}] **{story.story_title}** ({story.story_feed_title})\n"
-                f"   Scores: overall={c.scores.overall} importance={c.scores.importance}\n"
-                f"   Why it matters: {c.why_matters}\n"
-                f"   Summary: {c.summary}"
+                f"{i}. **{story.get('title', 'Untitled')}** ({story.get('feed_title', '')})\n"
+                f"   Score: {story.get('score', 0)} | Category: {story.get('sub_bucket', '')}\n"
+                f"   Why it matters: {story.get('why_matters', '')}\n"
+                f"   Summary: {story.get('summary', '')}"
             )
         return "\n\n".join(lines)
 

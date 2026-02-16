@@ -73,3 +73,34 @@ resource "aws_iam_role_policy" "ssm" {
   role   = aws_iam_role.lambda.id
   policy = data.aws_iam_policy_document.ssm.json
 }
+
+# SQS access
+data "aws_iam_policy_document" "sqs" {
+  statement {
+    actions = ["sqs:SendMessage"]
+    resources = [
+      aws_sqs_queue.ai_ml.arn,
+      aws_sqs_queue.world.arn,
+      aws_sqs_queue.briefing.arn,
+    ]
+  }
+
+  statement {
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+    ]
+    resources = [
+      aws_sqs_queue.ai_ml.arn,
+      aws_sqs_queue.world.arn,
+      aws_sqs_queue.briefing.arn,
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "sqs" {
+  name   = "sqs-access"
+  role   = aws_iam_role.lambda.id
+  policy = data.aws_iam_policy_document.sqs.json
+}

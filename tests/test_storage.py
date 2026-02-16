@@ -164,3 +164,57 @@ class TestMarkProcessed:
     def test_returns_false_on_error(self, storage, mock_table):
         mock_table.put_item.side_effect = Exception("write failed")
         assert storage.mark_processed("hash1", 5) is False
+
+
+class TestStoryContent:
+    def test_stores_and_retrieves_story_content(self, storage, mock_table):
+        mock_table.put_item.return_value = {}
+        mock_table.get_item.return_value = {
+            "Item": {
+                "record_type": "story_content",
+                "identifier": "hash1",
+                "data": {
+                    "title": "Test Story",
+                    "url": "https://example.com",
+                    "content": "Article body",
+                    "feed_title": "arXiv AI",
+                    "bucket": "ai-ml",
+                    "sub_bucket": "research",
+                    "newsblur_score": 1,
+                    "raindrop_id": None,
+                }
+            }
+        }
+        storage.store_story_content("hash1", {
+            "title": "Test Story",
+            "url": "https://example.com",
+            "content": "Article body",
+            "feed_title": "arXiv AI",
+            "bucket": "ai-ml",
+            "sub_bucket": "research",
+            "newsblur_score": 1,
+            "raindrop_id": None,
+        })
+        result = storage.get_story_content("hash1")
+        assert result["title"] == "Test Story"
+        assert result["bucket"] == "ai-ml"
+
+    def test_returns_none_for_missing_story(self, storage, mock_table):
+        mock_table.get_item.return_value = {}
+        assert storage.get_story_content("nonexistent") is None
+
+    def test_get_stories_content_returns_all_found(self, storage, mock_dynamo):
+        mock_dynamo.batch_get_item.return_value = {
+            "Responses": {
+                "test-table": [
+                    {"record_type": "story_content", "identifier": "hash1",
+                     "data": {"title": "Story 1", "bucket": "ai-ml"}},
+                    {"record_type": "story_content", "identifier": "hash2",
+                     "data": {"title": "Story 2", "bucket": "world"}},
+                ]
+            },
+            "UnprocessedKeys": {}
+        }
+        result = storage.get_stories_content(["hash1", "hash2", "hash3"])
+        assert len(result) == 2
+        assert result["hash1"]["title"] == "Story 1"

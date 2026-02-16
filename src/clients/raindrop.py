@@ -80,6 +80,7 @@ class RaindropClient:
             RaindropAuthError: On 401 (credentials invalid — do not retry).
             RaindropError: On persistent failure after retries.
         """
+        url = str(url)
         payload = {
             "link": url,
             "title": title,
@@ -98,3 +99,30 @@ class RaindropClient:
         data = resp.json()
         log_structured("INFO", "Raindrop bookmark created", url=url, title=title)
         return data["item"]
+
+    # ------------------------------------------------------------------
+    # Bookmark update
+    # ------------------------------------------------------------------
+
+    @retry(
+        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=15),
+        reraise=True,
+    )
+    def update_bookmark(self, raindrop_id: int, note: str) -> dict:
+        """Update the note field on an existing Raindrop bookmark.
+
+        Raises:
+            RaindropAuthError: On 401.
+            RaindropError: On persistent failure.
+        """
+        resp = self._session.put(
+            f"{self._base}/raindrop/{raindrop_id}",
+            json={"note": note},
+            timeout=15,
+        )
+        if resp.status_code == 401:
+            raise RaindropAuthError("Raindrop token invalid or expired (401)")
+        resp.raise_for_status()
+        return resp.json()["item"]

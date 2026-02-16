@@ -50,6 +50,24 @@ class TestCheckDuplicate:
             with pytest.raises(RaindropAuthError):
                 client.check_duplicate("https://example.com/story")
 
+    def test_accepts_httpurl_object_in_check_duplicate(self):
+        """Pydantic HttpUrl objects must be handled without errors in duplicate check."""
+        from pydantic import HttpUrl as PydanticHttpUrl
+        client = self._client()
+        with patch.object(client, "_session") as mock_session:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"result": True, "count": 0, "items": []}
+            mock_resp.raise_for_status = MagicMock()
+            mock_session.get.return_value = mock_resp
+
+            http_url = PydanticHttpUrl("https://arxiv.org/abs/1234.5678")
+            result = client.check_duplicate(http_url)
+            assert result is False
+            # Verify the URL was passed as a string in the search param
+            params = mock_session.get.call_args[1]["params"]
+            assert "https://arxiv.org/abs/1234.5678" in params["search"]
+
 
 class TestCreateBookmark:
     def _client(self):
@@ -93,6 +111,29 @@ class TestCreateBookmark:
             with pytest.raises(RaindropAuthError):
                 client.create_bookmark("https://x.com", "T", [], "note")
 
+    def test_accepts_httpurl_object_without_serialization_error(self):
+        """Pydantic HttpUrl objects must be cast to str before being sent in the JSON payload."""
+        from pydantic import HttpUrl as PydanticHttpUrl
+        client = self._client()
+        with patch.object(client, "_session") as mock_session:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"result": True, "item": {"_id": 1}}
+            mock_resp.raise_for_status = MagicMock()
+            mock_session.post.return_value = mock_resp
+
+            # Simulate what Pydantic v2 produces for story.story_permalink
+            http_url = PydanticHttpUrl("https://arxiv.org/abs/1234.5678")
+            # Should not raise TypeError: Object of type HttpUrl is not JSON serializable
+            result = client.create_bookmark(
+                url=http_url,
+                title="Test",
+                tags=[],
+                note="note",
+            )
+            payload = mock_session.post.call_args[1]["json"]
+            assert payload["link"] == "https://arxiv.org/abs/1234.5678"
+
     def test_retries_on_5xx_then_succeeds(self):
         client = self._client()
         with patch.object(client, "_session") as mock_session:
@@ -113,3 +154,34 @@ class TestCreateBookmark:
 
             assert mock_session.post.call_count == 2
             assert result["_id"] == 42
+
+
+class TestUpdateBookmark:
+    def _client(self):
+        return RaindropClient(token="tok", collection_id=99)
+
+    def test_sends_put_with_note(self):
+        client = self._client()
+        with patch.object(client, "_session") as mock_session:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"result": True, "item": {"_id": 123}}
+            mock_resp.raise_for_status = MagicMock()
+            mock_session.put.return_value = mock_resp
+
+            result = client.update_bookmark(raindrop_id=123, note="Summary text here.")
+
+            call_kwargs = mock_session.put.call_args
+            assert "/raindrop/123" in call_kwargs[0][0]
+            assert call_kwargs[1]["json"]["note"] == "Summary text here."
+            assert result["_id"] == 123
+
+    def test_raises_auth_error_on_401(self):
+        client = self._client()
+        with patch.object(client, "_session") as mock_session:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 401
+            mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_resp)
+            mock_session.put.return_value = mock_resp
+            with pytest.raises(RaindropAuthError):
+                client.update_bookmark(raindrop_id=123, note="text")
