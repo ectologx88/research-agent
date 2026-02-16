@@ -1,6 +1,7 @@
 """Amazon Bedrock client for briefing synthesis via Claude Sonnet 4.5."""
 
 import json
+from datetime import datetime, timezone
 
 import boto3
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -94,7 +95,6 @@ class BedrockBriefingClient:
             raise BriefingError("Cannot synthesize briefing: no stories provided")
 
         time_of_day = "morning" if run_hour_utc < 18 else "evening"
-        from datetime import datetime, timezone
         date_str = datetime.now(timezone.utc).strftime("%B %-d, %Y")
 
         story_list = self._format_stories(stories)
