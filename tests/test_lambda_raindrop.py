@@ -13,8 +13,10 @@ def _make_story(url="https://example.com/story"):
 def _make_classification(overall=9, concepts=["ai"], why="It matters."):
     c = MagicMock()
     c.scores.overall = overall
+    c.scores.importance = 0
     c.concepts = concepts
     c.why_matters = why
+    c.taxonomy_tags = []
     return c
 
 
@@ -35,11 +37,15 @@ def test_high_value_stories_sent_to_raindrop(
     settings.newsblur_password = "p"
     settings.bedrock_region = "us-east-1"
     settings.bedrock_model_id = "model"
+    settings.bedrock_briefing_model_id = "briefing-model"
     settings.dynamodb_table_name = "table"
     settings.dynamodb_region = "us-east-1"
     settings.threshold_overall = 8
     settings.raindrop_token = "tok"
     settings.raindrop_collection_id = -1
+    settings.raindrop_briefing_collection_id = -1
+    settings.briefing_prefilter_domain_min = 999
+    settings.briefing_prefilter_importance_min = 999
     mock_settings_cls.return_value = settings
 
     story = _make_story()
@@ -82,6 +88,9 @@ def test_duplicate_stories_skipped(
     settings.threshold_overall = 8
     settings.raindrop_token = "tok"
     settings.raindrop_collection_id = -1
+    settings.raindrop_briefing_collection_id = -1
+    settings.briefing_prefilter_domain_min = 999
+    settings.briefing_prefilter_importance_min = 999
     mock_settings_cls.return_value = settings
 
     story = _make_story()
@@ -117,6 +126,9 @@ def test_auth_failure_stops_remaining_stories(
     settings.threshold_overall = 8
     settings.raindrop_token = "tok"
     settings.raindrop_collection_id = -1
+    settings.raindrop_briefing_collection_id = -1
+    settings.briefing_prefilter_domain_min = 999
+    settings.briefing_prefilter_importance_min = 999
     mock_settings_cls.return_value = settings
 
     story1 = _make_story(url="https://example.com/1")
@@ -158,6 +170,9 @@ def test_no_raindrop_token_skips_entirely(
     settings.threshold_overall = 8
     settings.raindrop_token = ""  # no token
     settings.raindrop_collection_id = -1
+    settings.raindrop_briefing_collection_id = -1
+    settings.briefing_prefilter_domain_min = 999
+    settings.briefing_prefilter_importance_min = 999
     mock_settings_cls.return_value = settings
 
     story = _make_story()
@@ -191,6 +206,9 @@ def test_non_auth_exception_skips_story_and_continues(
     settings.threshold_overall = 8
     settings.raindrop_token = "tok"
     settings.raindrop_collection_id = -1
+    settings.raindrop_briefing_collection_id = -1
+    settings.briefing_prefilter_domain_min = 999
+    settings.briefing_prefilter_importance_min = 999
     mock_settings_cls.return_value = settings
 
     story1 = _make_story(url="https://example.com/1")
@@ -237,6 +255,9 @@ def test_story_with_no_url_skipped(
     settings.threshold_overall = 8
     settings.raindrop_token = "tok"
     settings.raindrop_collection_id = -1
+    settings.raindrop_briefing_collection_id = -1
+    settings.briefing_prefilter_domain_min = 999
+    settings.briefing_prefilter_importance_min = 999
     mock_settings_cls.return_value = settings
 
     story1 = _make_story(url=None)  # No URL
@@ -278,6 +299,9 @@ def test_auth_failure_after_duplicate_counts_correctly(
     settings.threshold_overall = 8
     settings.raindrop_token = "tok"
     settings.raindrop_collection_id = -1
+    settings.raindrop_briefing_collection_id = -1
+    settings.briefing_prefilter_domain_min = 999
+    settings.briefing_prefilter_importance_min = 999
     mock_settings_cls.return_value = settings
 
     # 3 stories: first is duplicate, second fails auth, third never processed
