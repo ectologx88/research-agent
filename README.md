@@ -85,7 +85,7 @@ pytest tests/ -v
 | `DYNAMODB_TABLE_NAME` | `newsblur-processing-state` | DynamoDB table |
 | `DYNAMODB_REGION` | `us-east-1` | DynamoDB region |
 | `BEDROCK_REGION` | `us-east-1` | Bedrock region |
-| `BEDROCK_MODEL_ID` | `us.anthropic.claude-3-5-haiku-20241022-v1:0` | Classification model (Terraform/deployed default; local Python default is `anthropic.claude-3-5-haiku-20241022-v1:0` when unset) |
+| `BEDROCK_MODEL_ID` | `us.anthropic.claude-3-5-haiku-20241022-v1:0` | Classification model |
 | `BEDROCK_BRIEFING_MODEL_ID` | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | Briefing model |
 | `RAINDROP_TOKEN` | — | Raindrop API token |
 | `RAINDROP_BRIEFING_COLLECTION_ID` | `-1` | Raindrop collection for briefings |
@@ -97,7 +97,7 @@ pytest tests/ -v
 | `BRIEFING_PREFILTER_DOMAIN_MIN` | `5` | Min overall score for briefing inclusion |
 | `BRIEFING_PREFILTER_IMPORTANCE_MIN` | `6` | Min importance score for briefing inclusion |
 
-_Note: Values shown in the "Default" column reflect the deployed/production configuration (set via Terraform). Python in-code fallback defaults, used when environment variables are unset, may differ; see `src/config.py` for the authoritative in-code values._
+_Note: Values shown in the "Default" column reflect the deployed/production configuration (set via Terraform). Python in-code fallback defaults, used when environment variables are unset, may differ; see `src/config.py` for the authoritative in-code values. For example, `BEDROCK_MODEL_ID` uses `anthropic.claude-3-5-haiku-20241022-v1:0` (without the `us.` prefix) as the Python default._
 
 ## Classification Schema (Phase 2b)
 
