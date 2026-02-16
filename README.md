@@ -1,21 +1,32 @@
-# Research Agent — Phase 2b: Intelligence Pipeline + Briefing Synthesis
+# NewsBlur Research Agent — Phase 3
 
-A serverless pipeline that fetches unread RSS stories from NewsBlur, classifies them using Claude 3.5 Haiku via Amazon Bedrock, saves high-value stories to Raindrop.io, and synthesizes a narrative briefing using Claude Sonnet 4.5. Runs twice daily at 6 AM and 6 PM US Central.
+A serverless three-Lambda pipeline that fetches RSS stories from NewsBlur, triages them by topic, summarizes each story with Claude 3.5 Haiku, and synthesizes dual daily briefings (AI/ML and World) with Claude Sonnet 4.5. Runs twice daily at 6 AM and 6 PM UTC.
 
 ## Architecture
 
 ```
-NewsBlur API  →  Lambda  →  Bedrock (Claude 3.5 Haiku)
-                   ↓                    ↓
-              DynamoDB           Classification results
-            (dedup + state)      (importance, taxonomy,
-                                  priority flag)
-                   ↓
-             Raindrop.io
-           ┌──────┴──────┐
-      Story bookmarks   Briefing bookmark
-      (taxonomy tags)   (Claude Sonnet 4.5
-                         narrative synthesis)
+EventBridge (6AM / 6PM UTC)
+        |
+        v
+Lambda 1: Triage  (< 60s, no LLM)
+- Fetch stories from NewsBlur (min_score=1)
+- Rule-based triage: AI/ML | World | Skip
+- Route to Raindrop (AI/ML Feed or World Digest)
+- Store story content in DynamoDB (24h TTL)
+- Send SQS messages to two queues
+        |
+        v (two SQS queues — parallel)
+Lambda 2: Summarizer  (Haiku, up to 900s)
+- Consume SQS messages (AI/ML and World queues)
+- Summarize each story with Claude 3.5 Haiku
+- Update Raindrop bookmark notes with summary
+- Send qualified stories to briefing SQS queue
+        |
+        v
+Lambda 3: Briefing  (Sonnet 4.5, up to 300s)
+- Consume briefing SQS queue
+- Synthesize narrative briefing per bucket (AI/ML or World)
+- Post briefing bookmark to Raindrop briefing collection
 ```
 
 ## Project Structure
@@ -23,122 +34,61 @@ NewsBlur API  →  Lambda  →  Bedrock (Claude 3.5 Haiku)
 ```
 research-agent/
 ├── src/
-│   ├── lambda_handler.py        # Entry point, orchestration
+│   ├── handlers/
+│   │   ├── triage_handler.py       # Lambda 1 entry point
+│   │   ├── summarizer_handler.py   # Lambda 2 entry point
+│   │   └── briefing_handler.py     # Lambda 3 entry point
 │   ├── models/
-│   │   ├── story.py             # Story data model
-│   │   └── classification.py    # Classification result model (Phase 2b)
+│   │   └── story.py                # Story data model
 │   ├── clients/
-│   │   ├── newsblur.py          # NewsBlur API client
-│   │   ├── bedrock.py           # Bedrock/Claude 3.5 Haiku client + prompt v2
-│   │   ├── bedrock_briefing.py  # Bedrock/Claude Sonnet 4.5 briefing client
-│   │   └── raindrop.py          # Raindrop.io API client
+│   │   ├── newsblur.py             # NewsBlur API client
+│   │   ├── bedrock_summarizer.py   # Claude 3.5 Haiku summarizer
+│   │   ├── bedrock_briefing.py     # Claude Sonnet 4.5 briefing
+│   │   └── raindrop.py             # Raindrop.io API client
 │   ├── services/
-│   │   ├── classifier.py        # Pipeline orchestration
-│   │   └── storage.py           # DynamoDB dedup + last-run state
-│   ├── config.py                # Settings (env vars / .env)
-│   └── utils.py                 # Structured logging, timing
+│   │   ├── triage.py               # Rule-based story categorization
+│   │   └── storage.py              # DynamoDB state + story content
+│   ├── config.py                   # Settings (env vars / SSM)
+│   └── utils.py                    # Structured logging, timing
 ├── tests/
-├── terraform/                   # IaC for Lambda, DynamoDB, IAM, EventBridge
-├── verify_connections.py        # Pre-flight credential check
-├── raindrop_oauth.py            # Raindrop OAuth setup
-├── deploy.sh                    # Package + deploy
+├── terraform/                      # DynamoDB, Lambda, SQS, IAM, EventBridge
+├── deploy.sh                       # Package + deploy Lambda zip
+├── verify_connections.py           # Pre-flight credential check
+├── raindrop_oauth.py               # Raindrop OAuth helper
 └── requirements.txt
 ```
 
-## Prerequisites
+## Raindrop Collections
 
-- Python 3.12+
-- AWS CLI configured with `seth-dev` profile
-- Bedrock model access in us-east-1:
-  - `us.anthropic.claude-3-5-haiku-20241022-v1:0` (classification)
-  - `us.anthropic.claude-sonnet-4-5-20250929-v1:0` (briefing)
-- SSM parameters stored under `/prod/ResearchAgent/`:
-  - `NewsBlur_User`, `NewsBlur_Pass`
-  - `Raindrop_Token`
-  - `Raindrop_Briefing_Collection_Id`
-
-## Setup
-
-```bash
-cd research-agent
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# Verify all service connections
-python verify_connections.py
-```
-
-## Running Tests
-
-```bash
-pytest tests/ -v
-```
+| Collection | Visibility | Purpose |
+|------------|-----------|---------|
+| AI/ML Feed | Public | AI and ML story bookmarks with summaries |
+| World Digest | Private | World news bookmarks with summaries |
+| Briefings | Private | Synthesized daily briefing documents |
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NEWSBLUR_USERNAME` | — | NewsBlur login |
-| `NEWSBLUR_PASSWORD` | — | NewsBlur password |
-| `DYNAMODB_TABLE_NAME` | `newsblur-processing-state` | DynamoDB table |
-| `DYNAMODB_REGION` | `us-east-1` | DynamoDB region |
-| `BEDROCK_REGION` | `us-east-1` | Bedrock region |
-| `BEDROCK_MODEL_ID` | `us.anthropic.claude-3-5-haiku-20241022-v1:0` | Classification model |
-| `BEDROCK_BRIEFING_MODEL_ID` | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | Briefing model |
-| `RAINDROP_TOKEN` | — | Raindrop API token |
-| `RAINDROP_BRIEFING_COLLECTION_ID` | `-1` | Raindrop collection for briefings |
-| `MAX_STORIES_PER_RUN` | `200` | Story cap per invocation |
-| `NEWSBLUR_MIN_SCORE` | `0` | Minimum NewsBlur intelligence score (-1, 0, 1) |
-| `MARK_AS_READ` | `false` | Mark classified stories as read in NewsBlur |
-| `FETCH_STRATEGY` | `hours_back` | `hours_back` or `since_last_run` |
-| `HOURS_BACK_DEFAULT` | `12` | Hours to look back when using `hours_back` strategy |
-| `BRIEFING_PREFILTER_DOMAIN_MIN` | `5` | Min overall score for briefing inclusion |
-| `BRIEFING_PREFILTER_IMPORTANCE_MIN` | `6` | Min importance score for briefing inclusion |
+Key environment variables and SSM parameters (prefix: `/prod/ResearchAgent/`):
 
-## Classification Schema (Phase 2b)
+| Parameter | Description |
+|-----------|-------------|
+| `NewsBlur_User` / `NewsBlur_Pass` | NewsBlur credentials (SSM) |
+| `Raindrop_Token` | Raindrop API token (SSM) |
+| `RAINDROP_AIML_COLLECTION_ID` | Collection ID for AI/ML bookmarks |
+| `RAINDROP_WORLD_COLLECTION_ID` | Collection ID for World Digest bookmarks |
+| `RAINDROP_BRIEFING_COLLECTION_ID` | Collection ID for briefing documents |
+| `DYNAMODB_TABLE_NAME` | DynamoDB table (default: `newsblur-processing-state`) |
+| `BEDROCK_SUMMARIZER_MODEL_ID` | Haiku model for summarization |
+| `BEDROCK_BRIEFING_MODEL_ID` | Sonnet 4.5 model for briefing synthesis |
+| `NEWSBLUR_MIN_SCORE` | Min NewsBlur intelligence score (default: `1`) |
+| `SQS_AIML_QUEUE_URL` | SQS queue URL for AI/ML stories |
+| `SQS_WORLD_QUEUE_URL` | SQS queue URL for World stories |
+| `SQS_BRIEFING_QUEUE_URL` | SQS queue URL for briefing synthesis |
 
-Each story receives:
-
-- **Relevance scores** (1-10): `ai_ml`, `neuroscience`, `theory`, `content_craft`, `overall`
-- **Importance score** (1-10): broader world significance beyond Seth's domain interests
-- **Taxonomy tags**: `#ai-research`, `#ai-policy`, `#consciousness`, `#rdd-framework`, `#client-work`, `#neurodivergent-tech`, `#industry-news`, `#world-news`
-- **Priority flag**: `⚡` (urgent), `🎯` (actionable), `🧠` (deep-think), `🔗` (connector), `📊` (data-point), `🚨` (risk-signal)
-- **Concepts**: 3-5 key topics
-- **Summary**: 2-3 sentence overview + why it matters
-
-## Briefing Synthesis
-
-Stories passing the pre-filter (`overall >= 5 OR importance >= 6`) are synthesized into a 5-section narrative briefing by Claude Sonnet 4.5:
-
-1. **Executive Summary** — 3-5 bullets of the most critical items
-2. **Must-Know Today** — top 3 stories with full context
-3. **Deep Dives** — 3-5 stories worth extended reading time
-4. **Weak Signals** — emerging patterns across multiple stories
-5. **Notable Omissions** — important topics absent from today's feed
-
-The briefing is saved as a bookmark in the configured Raindrop collection, titled `"Morning Briefing — YYYY-MM-DD"` or `"Evening Briefing — YYYY-MM-DD"`.
-
-## Storage Strategy
-
-DynamoDB is used for **minimal state tracking only**.
-
-### Schema
-
-```
-Table: newsblur-processing-state
-PK: record_type (String)    — "config" or "story"
-SK: identifier (String)     — "last_run_timestamp" or story_hash
-
-Record types:
-1. config / last_run_timestamp  — ISO timestamp of last successful run
-2. story / <story_hash>        — Minimal dedup record with 3-day TTL
-```
-
-## Deploying
+## Deployment
 
 ```bash
-# 1. Package Lambda zip (uses manylinux wheels for pydantic-core compatibility)
+# 1. Package Lambda zip (manylinux wheels for pydantic-core compatibility)
 ./deploy.sh
 
 # 2. Deploy infrastructure
@@ -148,31 +98,18 @@ terraform plan
 terraform apply
 ```
 
-## Schedule
+## Development and Testing
 
-EventBridge cron: `cron(0 11,23 * * ? *)` — 6 AM and 6 PM US Central (11:00 and 23:00 UTC).
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-## Pipeline Output
+# Verify all service connections
+python verify_connections.py
 
-```json
-{
-  "statusCode": 200,
-  "body": {
-    "execution_id": "uuid",
-    "timestamp": "2026-02-16T11:00:00Z",
-    "high_value_count": 12,
-    "raindrop_sent": 10,
-    "raindrop_skipped": 2,
-    "briefing_sent": 1,
-    "metrics": {
-      "stories_fetched": 180,
-      "stories_classified": 170,
-      "already_processed": 10,
-      "classification_failures": 0,
-      "high_value_stories": 12,
-      "execution_time_seconds": 85.2,
-      "top_stories": [...]
-    }
-  }
-}
+# Run tests
+pytest tests/ -v
 ```
+
+Requires Python 3.12+, AWS CLI configured with `seth-dev` profile, and Bedrock model access in `us-east-1` for both Haiku and Sonnet 4.5.
