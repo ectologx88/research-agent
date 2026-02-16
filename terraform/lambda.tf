@@ -47,7 +47,7 @@ resource "aws_lambda_function" "triage" {
   role          = aws_iam_role.lambda.arn
   handler       = "src.handlers.triage_handler.lambda_handler"
   runtime       = "python3.12"
-  timeout       = 60
+  timeout       = 180
   memory_size   = 256
 
   filename         = "${path.module}/../dist/lambda.zip"

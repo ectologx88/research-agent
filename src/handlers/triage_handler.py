@@ -1,5 +1,6 @@
 """Lambda 1: Fetch from NewsBlur, triage stories, route to Raindrop, send SQS."""
 import json
+import time
 import uuid
 
 import boto3
@@ -127,6 +128,7 @@ def _route_to_raindrop(stories_with_sub, raindrop, storage, bucket_name):
                 "raindrop_id": raindrop_id,
             })
             storage.mark_processed(story.story_hash, getattr(story, "newsblur_score", 0))
+            time.sleep(0.2)  # avoid Raindrop 429 rate limiting
         except RaindropAuthError:
             log_structured("ERROR", "Raindrop auth failed", bucket=bucket_name)
             break
