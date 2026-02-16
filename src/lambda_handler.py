@@ -127,9 +127,10 @@ def lambda_handler(event, context):
 
             if briefing_stories:
                 try:
-                    run_hour_utc = datetime.now(timezone.utc).hour
+                    now = datetime.now(timezone.utc)
+                    run_hour_utc = now.hour
                     time_of_day = "Morning" if run_hour_utc < 18 else "Evening"
-                    date_str = datetime.now(timezone.utc).strftime("%b %-d, %Y")
+                    date_str = f"{now.strftime('%b')} {now.day}, {now.year}"
                     briefing_title = f"{time_of_day} Briefing \u2014 {date_str}"
 
                     briefing_client = BedrockBriefingClient(
