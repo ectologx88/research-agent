@@ -36,6 +36,12 @@ class RaindropClient:
     # Duplicate detection
     # ------------------------------------------------------------------
 
+    @retry(
+        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=15),
+        reraise=True,
+    )
     def check_duplicate(self, url: str) -> bool:
         """Return True if *url* already exists in the target collection."""
         if not url:

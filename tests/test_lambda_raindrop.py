@@ -1,5 +1,5 @@
 """Integration tests for Raindrop wiring in lambda_handler."""
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 import pytest
 
 
@@ -16,17 +16,6 @@ def _make_classification(overall=9, concepts=["ai"], why="It matters."):
     c.concepts = concepts
     c.why_matters = why
     return c
-
-
-def _make_result(pairs):
-    r = MagicMock()
-    r.classified = pairs
-    r.metrics = MagicMock()
-    r.metrics.__dict__ = {}
-    import dataclasses
-    with patch("dataclasses.asdict", return_value={}):
-        pass
-    return r
 
 
 @patch("src.lambda_handler.RaindropClient")
@@ -185,3 +174,91 @@ def test_no_raindrop_token_skips_entirely(
     mock_raindrop_cls.assert_not_called()
     assert response["body"]["raindrop_sent"] == 0
     assert response["body"]["raindrop_skipped"] == 0
+
+
+@patch("src.lambda_handler.RaindropClient")
+@patch("src.lambda_handler.ClassificationService")
+@patch("src.lambda_handler.ProcessingStateStorage")
+@patch("src.lambda_handler.BedrockClassifier")
+@patch("src.lambda_handler.NewsBlurClient")
+@patch("src.lambda_handler.Settings")
+def test_non_auth_exception_skips_story_and_continues(
+    mock_settings_cls, mock_nb_cls, mock_bedrock_cls,
+    mock_storage_cls, mock_svc_cls, mock_raindrop_cls
+):
+    """Test that non-auth exceptions skip the story and processing continues."""
+    settings = MagicMock()
+    settings.threshold_overall = 8
+    settings.raindrop_token = "tok"
+    settings.raindrop_collection_id = -1
+    mock_settings_cls.return_value = settings
+
+    story1 = _make_story(url="https://example.com/1")
+    story2 = _make_story(url="https://example.com/2")
+    c1 = _make_classification(overall=9)
+    c2 = _make_classification(overall=9)
+    result = MagicMock()
+    result.classified = [(story1, c1), (story2, c2)]
+    result.metrics = MagicMock()
+    mock_svc_cls.return_value.run.return_value = result
+
+    raindrop_instance = MagicMock()
+    # First story raises a network timeout (non-auth exception)
+    # Second story succeeds
+    raindrop_instance.check_duplicate.side_effect = [
+        Exception("Network timeout"),
+        False
+    ]
+    mock_raindrop_cls.return_value = raindrop_instance
+
+    with patch("dataclasses.asdict", return_value={}):
+        from src import lambda_handler
+        response = lambda_handler.lambda_handler({}, {})
+
+    # Both stories attempted, first failed, second succeeded
+    assert raindrop_instance.check_duplicate.call_count == 2
+    assert raindrop_instance.create_bookmark.call_count == 1
+    assert response["body"]["raindrop_sent"] == 1
+    assert response["body"]["raindrop_skipped"] == 1
+
+
+@patch("src.lambda_handler.RaindropClient")
+@patch("src.lambda_handler.ClassificationService")
+@patch("src.lambda_handler.ProcessingStateStorage")
+@patch("src.lambda_handler.BedrockClassifier")
+@patch("src.lambda_handler.NewsBlurClient")
+@patch("src.lambda_handler.Settings")
+def test_story_with_no_url_skipped(
+    mock_settings_cls, mock_nb_cls, mock_bedrock_cls,
+    mock_storage_cls, mock_svc_cls, mock_raindrop_cls
+):
+    """Test that stories with no URL are skipped."""
+    settings = MagicMock()
+    settings.threshold_overall = 8
+    settings.raindrop_token = "tok"
+    settings.raindrop_collection_id = -1
+    mock_settings_cls.return_value = settings
+
+    story1 = _make_story(url=None)  # No URL
+    story2 = _make_story(url="https://example.com/2")
+    c1 = _make_classification(overall=9)
+    c2 = _make_classification(overall=9)
+    result = MagicMock()
+    result.classified = [(story1, c1), (story2, c2)]
+    result.metrics = MagicMock()
+    mock_svc_cls.return_value.run.return_value = result
+
+    raindrop_instance = MagicMock()
+    raindrop_instance.check_duplicate.return_value = False
+    mock_raindrop_cls.return_value = raindrop_instance
+
+    with patch("dataclasses.asdict", return_value={}):
+        from src import lambda_handler
+        response = lambda_handler.lambda_handler({}, {})
+
+    # Only the second story with valid URL is checked
+    raindrop_instance.check_duplicate.assert_called_once_with(story2.story_permalink)
+    raindrop_instance.create_bookmark.assert_called_once()
+    assert response["body"]["raindrop_sent"] == 1
+    assert response["body"]["raindrop_skipped"] == 1
+

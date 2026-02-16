@@ -89,7 +89,7 @@ def lambda_handler(event, context):
             except RaindropAuthError as exc:
                 log_structured("ERROR", "Raindrop auth failed — stopping", error=str(exc))
                 auth_failed = True
-                raindrop_skipped += len(high_value) - raindrop_sent
+                raindrop_skipped += len(high_value) - raindrop_sent - raindrop_skipped
 
             except Exception as exc:
                 log_structured(
