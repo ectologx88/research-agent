@@ -10,6 +10,24 @@ from src.models.classification import Classification, TaxonomyTag, PriorityFlag
 from src.models.story import Story
 from typing import List, Tuple
 
+WORLD_SYSTEM_PROMPT = """You are a concise daily briefing editor producing a morning/evening digest
+for an informed, curious reader. Cover world events, science, tech culture, and weather.
+Be direct, accessible, and brief. Prioritize what matters most today."""
+
+WORLD_BRIEFING_SECTIONS = """\
+## Top Stories
+The 3–5 most important world and national stories today.
+
+## Science & Discovery
+Notable science findings or research worth knowing.
+
+## Tech & Geek Culture
+Interesting tech news, culture, and developments.
+
+## Local & Weather
+Local news and weather patterns of note.
+"""
+
 SETH_SYSTEM_PROMPT = """\
 You are an intelligence analyst writing a personal briefing for Seth Holloway.
 
@@ -81,12 +99,14 @@ class BedrockBriefingClient:
         self,
         stories: List[Tuple[Story, Classification]],
         run_hour_utc: int,
+        briefing_type: str = "ai-ml",
     ) -> str:
         """Return briefing text for the given stories.
 
         Args:
             stories: Pre-filtered (Story, Classification) pairs.
             run_hour_utc: UTC hour of the Lambda invocation (determines morning/evening label).
+            briefing_type: "ai-ml" for Seth's AI/ML briefing, "world" for world digest.
 
         Raises:
             BriefingError: If stories is empty or Bedrock call fails.
@@ -105,6 +125,8 @@ class BedrockBriefingClient:
             story_list=story_list,
         )
 
+        if briefing_type == "world":
+            return self._invoke(WORLD_SYSTEM_PROMPT, user_prompt)
         return self._invoke(SETH_SYSTEM_PROMPT, user_prompt)
 
     def _format_stories(self, stories: List[Tuple[Story, Classification]]) -> str:

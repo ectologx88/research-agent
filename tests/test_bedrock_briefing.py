@@ -106,3 +106,20 @@ def test_invoke_raises_briefing_error_on_exception():
         mock_boto.invoke_model.side_effect = Exception("Bedrock down")
         with pytest.raises(BriefingError):
             client._invoke("sys", "user")
+
+
+def test_world_briefing_uses_world_prompt():
+    stories = [(_make_story(), _make_classification())]
+    captured_prompt = {}
+
+    def fake_invoke(self, system, user):
+        captured_prompt["system"] = system
+        captured_prompt["user"] = user
+        return "world briefing text"
+
+    with patch.object(BedrockBriefingClient, "_invoke", fake_invoke):
+        client = BedrockBriefingClient()
+        client.synthesize(stories, 11, briefing_type="world")
+
+    system = captured_prompt.get("system", "").lower()
+    assert "digest" in system or "world" in system
