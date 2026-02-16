@@ -104,5 +104,6 @@ def test_invoke_raises_briefing_error_on_exception():
     client = BedrockBriefingClient()
     with patch.object(client, "_client") as mock_boto:
         mock_boto.invoke_model.side_effect = Exception("Bedrock down")
+        # Call the undecorated _invoke to avoid tenacity backoff delays in tests.
         with pytest.raises(BriefingError):
-            client._invoke("sys", "user")
+            BedrockBriefingClient._invoke.__wrapped__(client, "sys", "user")
