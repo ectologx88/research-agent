@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     # NewsBlur
-    newsblur_username: str
-    newsblur_password: str
+    newsblur_username: str = ""
+    newsblur_password: str = ""
     newsblur_min_score: int = 1  # -1, 0, or 1
 
     # Fetch strategy
