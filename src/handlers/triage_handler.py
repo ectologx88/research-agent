@@ -2,44 +2,14 @@
 import json
 import uuid
 
-try:
-    boto3
-except NameError:
-    import boto3
+import boto3
 
-try:
-    NewsBlurClient
-except NameError:
-    from src.clients.newsblur import NewsBlurClient
-
-try:
-    RaindropClient
-    RaindropAuthError
-except NameError:
-    from src.clients.raindrop import RaindropClient, RaindropAuthError
-
-try:
-    Settings
-except NameError:
-    from src.config import Settings
-
-try:
-    ProcessingStateStorage
-except NameError:
-    from src.services.storage import ProcessingStateStorage
-
-try:
-    Bucket
-    TriageService
-except NameError:
-    from src.services.triage import Bucket, TriageService
-
-try:
-    log_structured
-    timed
-    utcnow
-except NameError:
-    from src.utils import log_structured, timed, utcnow
+from src.clients.newsblur import NewsBlurClient
+from src.clients.raindrop import RaindropClient, RaindropAuthError
+from src.config import Settings
+from src.services.storage import ProcessingStateStorage
+from src.services.triage import Bucket, TriageService
+from src.utils import log_structured, timed, utcnow
 
 
 def lambda_handler(event, context):

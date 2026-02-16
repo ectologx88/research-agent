@@ -43,10 +43,8 @@ def test_routes_aiml_story_to_aiml_collection(
     mock_raindrop_cls.return_value.check_duplicate.return_value = False
     mock_raindrop_cls.return_value.create_bookmark.return_value = {"_id": 999}
 
-    from src.handlers import triage_handler
-    import importlib
-    importlib.reload(triage_handler)
-    resp = triage_handler.lambda_handler({}, {})
+    from src.handlers.triage_handler import lambda_handler
+    resp = lambda_handler({}, {})
 
     assert resp["statusCode"] == 200
     assert resp["body"]["ai_ml_count"] == 1
@@ -79,10 +77,8 @@ def test_skip_stories_are_not_saved(
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_storage_cls.return_value.batch_check_processed.return_value = set()
 
-    from src.handlers import triage_handler
-    import importlib
-    importlib.reload(triage_handler)
-    resp = triage_handler.lambda_handler({}, {})
+    from src.handlers.triage_handler import lambda_handler
+    resp = lambda_handler({}, {})
 
     assert resp["body"]["skipped_count"] == 1
     mock_raindrop_cls.return_value.create_bookmark.assert_not_called()
