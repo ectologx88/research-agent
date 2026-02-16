@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,12 +22,33 @@ class Actionability(str, Enum):
     EVERGREEN = "evergreen"
 
 
+class TaxonomyTag(str, Enum):
+    AI_RESEARCH = "#ai-research"
+    AI_POLICY = "#ai-policy"
+    CONSCIOUSNESS = "#consciousness"
+    RDD_FRAMEWORK = "#rdd-framework"
+    CLIENT_WORK = "#client-work"
+    NEURODIVERGENT_TECH = "#neurodivergent-tech"
+    INDUSTRY_NEWS = "#industry-news"
+    WORLD_NEWS = "#world-news"
+
+
+class PriorityFlag(str, Enum):
+    BREAKING = "⚡"
+    ACTIONABLE = "🎯"
+    CONCEPTUAL = "🧠"
+    CONNECTIVE = "🔗"
+    DATA_DRIVEN = "📊"
+    RISK = "🚨"
+
+
 class RelevanceScores(BaseModel):
     ai_ml: int = Field(ge=1, le=10)
     neuroscience: int = Field(ge=1, le=10)
     theory: int = Field(ge=1, le=10)
     content_craft: int = Field(ge=1, le=10)
     overall: int = Field(ge=1, le=10)
+    importance: int = Field(ge=1, le=10)
 
 
 class Classification(BaseModel):
@@ -35,6 +56,8 @@ class Classification(BaseModel):
     scores: RelevanceScores
     content_type: ContentType
     actionability: List[Actionability]
+    taxonomy_tags: List[TaxonomyTag] = Field(default_factory=list)
+    priority_flag: Optional[PriorityFlag] = None
     concepts: List[str] = Field(min_length=1, max_length=7)
     why_matters: str
     summary: str
