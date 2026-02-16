@@ -192,7 +192,7 @@ class RaindropClient:
             return False
         resp = self._session.get(
             f"{self._base}/raindrops/{self._collection_id}",
-            params={"search": url, "perpage": 1},
+            params={"search": f"link:{url}", "perpage": 1},
             timeout=15,
         )
         resp.raise_for_status()

@@ -1,5 +1,5 @@
 """Tests for the Raindrop API client."""
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
