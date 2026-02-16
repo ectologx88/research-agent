@@ -81,7 +81,7 @@ def lambda_handler(event, context):
 
             try:
                 if raindrop.check_duplicate(story.story_permalink):
-                    log_structured("INFO", "Raindrop duplicate skipped", url=story.story_permalink)
+                    log_structured("INFO", "Raindrop duplicate skipped", url=str(story.story_permalink))
                     raindrop_skipped += 1
                     continue
 
@@ -109,7 +109,7 @@ def lambda_handler(event, context):
                 log_structured(
                     "WARNING",
                     "Raindrop bookmark failed after retries",
-                    url=story.story_permalink,
+                    url=str(story.story_permalink),
                     error=str(exc),
                 )
                 raindrop_skipped += 1
@@ -139,7 +139,7 @@ def lambda_handler(event, context):
                     briefing_text = briefing_client.synthesize(briefing_stories, run_hour_utc)
 
                     # Use the first story's URL as the required Raindrop URL
-                    first_url = briefing_stories[0][0].story_permalink or "https://newsblur.com"
+                    first_url = str(briefing_stories[0][0].story_permalink) if briefing_stories[0][0].story_permalink else "https://newsblur.com"
 
                     briefing_raindrop = RaindropClient(
                         token=settings.raindrop_token,
