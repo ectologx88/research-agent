@@ -16,12 +16,14 @@ from src.models.classification import (
     Actionability,
     Classification,
     ContentType,
+    PriorityFlag,
     RelevanceScores,
+    TaxonomyTag,
 )
 from src.models.story import Story
 from src.utils import log_structured, utcnow
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 
 CLASSIFICATION_PROMPT_V1 = """\
 You are an AI research analyst classifying RSS stories for a knowledge worker \
@@ -80,11 +82,37 @@ more heavily when applicable.
 - industry: Business / market news, product launches, funding
 - world_news: Geopolitical, policy, regulation, or societal impact
 
+## Importance (1-10)
+Strategic significance independent of domain relevance.
+- 9-10: World-changing event (paradigm-shifting model release, landmark legislation, existential-risk signal)
+- 7-8: High strategic significance (major policy shift, widely-adopted new technique, industry restructuring)
+- 5-6: Moderate significance (notable but not landmark, useful to track)
+- 3-4: Low broader significance, niche interest
+- 1-2: Routine/low-signal
+
 ## Actionability Tags (choose all that apply)
 - citation_worthy: Contains specific claims, data, or quotes worth referencing
 - thought_provoking: Challenges assumptions or introduces novel framing
 - time_sensitive: Relevance diminishes significantly after 48 hours
 - evergreen: Will remain relevant for months / years
+
+## Taxonomy Tags (choose all that apply from this exact list)
+- #ai-research — papers, benchmarks, capabilities advances
+- #ai-policy — regulation, governance, safety policy
+- #consciousness — philosophy of mind, sentience, phenomenology
+- #rdd-framework — Recursive Developmental Design methodology
+- #client-work — practical AI adoption, enterprise deployment
+- #neurodivergent-tech — ADHD/autism/accessibility tooling
+- #industry-news — market moves, funding, launches, acquisitions
+- #world-news — geopolitical/economic events with AI implications
+
+## Priority Flag (choose at most one, or null)
+- ⚡ breaking / time-sensitive
+- 🎯 directly actionable for an AI adoption consultant
+- 🧠 deep conceptual value
+- 🔗 connects multiple threads in AI/consciousness/RDD thinking
+- 📊 data/evidence-driven
+- 🚨 risk or threat signal
 
 ## Response Format
 Respond with ONLY valid JSON — no markdown fences, no commentary.
@@ -94,10 +122,13 @@ Respond with ONLY valid JSON — no markdown fences, no commentary.
     "neuroscience": <int>,
     "theory": <int>,
     "content_craft": <int>,
-    "overall": <int>
+    "overall": <int>,
+    "importance": <int>
   }},
   "content_type": "<string>",
   "actionability": ["<string>", ...],
+  "taxonomy_tags": ["<string>", ...],
+  "priority_flag": "<string or null>",
   "concepts": ["<3-5 specific concepts extracted from the story>"],
   "why_matters": "<one sentence>",
   "summary": "<2-3 sentences>"
@@ -212,11 +243,31 @@ class BedrockClassifier:
 
             actionability = [Actionability(a) for a in data.get("actionability", [])]
 
+            # Parse taxonomy tags — silently drop unknown values
+            raw_tags = data.get("taxonomy_tags", [])
+            taxonomy_tags = []
+            for t in raw_tags:
+                try:
+                    taxonomy_tags.append(TaxonomyTag(t))
+                except ValueError:
+                    pass
+
+            # Parse priority flag — None if absent or unrecognized
+            raw_flag = data.get("priority_flag")
+            priority_flag = None
+            if raw_flag:
+                try:
+                    priority_flag = PriorityFlag(raw_flag)
+                except ValueError:
+                    pass
+
             return Classification(
                 story_hash=story_hash,
                 scores=scores,
                 content_type=content_type,
                 actionability=actionability,
+                taxonomy_tags=taxonomy_tags,
+                priority_flag=priority_flag,
                 concepts=data.get("concepts", [])[:7],
                 why_matters=data.get("why_matters", ""),
                 summary=data.get("summary", ""),
