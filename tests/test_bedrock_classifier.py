@@ -1,7 +1,5 @@
 """Tests for BedrockClassifier prompt parsing with Phase 2b fields."""
 import json
-from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone
 
 import pytest
 
