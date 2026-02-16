@@ -11,10 +11,22 @@ rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/package"
 
 # 2. Install deps into package dir
+# pydantic-core has a native C extension; use a manylinux wheel so it runs on
+# Lambda's Amazon Linux 2023 (glibc 2.34) regardless of the local glibc version.
+pip install \
+  --target "$DIST_DIR/package" \
+  --platform manylinux2014_x86_64 \
+  --implementation cp \
+  --python-version 3.12 \
+  --only-binary=:all: \
+  --quiet \
+  pydantic pydantic-core pydantic-settings
+
+# Install remaining pure-Python deps normally
 pip install \
   --target "$DIST_DIR/package" \
   --quiet \
-  -r "$PROJECT_ROOT/requirements.txt"
+  boto3 requests tenacity pyzotero
 
 # 3. Copy source
 cp -r "$PROJECT_ROOT/src" "$DIST_DIR/package/src"
