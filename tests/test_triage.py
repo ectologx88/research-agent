@@ -26,6 +26,14 @@ class TestFeedNameRules:
         assert bucket == Bucket.WORLD
         assert sub == "weather"
 
+
+    def test_none_sub_feed_still_uses_feed_bucket_not_keyword(self):
+        # If we had a feed with sub=None, a matching title keyword shouldn't override the bucket
+        # Test with a known skip feed that has keywords in title
+        svc = TriageService()
+        result = svc.categorize(self._story("ESPN", story_title="New LLM released"))
+        assert result == Bucket.SKIP  # ESPN beats LLM keyword
+
 class TestKeywordFallback:
     def _story(self, title, feed="Unknown Feed"):
         from unittest.mock import MagicMock

@@ -88,9 +88,7 @@ class TriageService:
         # Step 1: feed-name lookup (substring match)
         for pattern, (bucket, sub) in FEED_RULES.items():
             if pattern in feed_lower:
-                if sub is not None:
-                    return bucket, sub
-                break
+                return bucket, (sub or "general")
 
         # Step 2: keyword fallback
         if any(kw in title_lower for kw in AI_ML_KEYWORDS):
