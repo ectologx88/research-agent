@@ -47,7 +47,7 @@ resource "aws_lambda_function" "classifier" {
     variables = {
       NEWSBLUR_USERNAME    = data.aws_ssm_parameter.newsblur_user.value
       NEWSBLUR_PASSWORD    = data.aws_ssm_parameter.newsblur_pass.value
-      RAINDROP_TOKEN       = data.aws_ssm_parameter.raindrop_token.value
+      RAINDROP_TOKEN       = data.aws_ssm_parameter.raindrop_token.name
       DYNAMODB_TABLE_NAME  = aws_dynamodb_table.processing_state.name
       DYNAMODB_REGION      = "us-east-1"
       BEDROCK_REGION       = "us-east-1"
