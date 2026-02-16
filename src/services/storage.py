@@ -144,3 +144,53 @@ class ProcessingStateStorage:
                 error=str(exc),
             )
             return False
+
+    # ------------------------------------------------------------------
+    # Story content (temporary, 24h TTL — for Lambda 1 → Lambda 2 handoff)
+    # ------------------------------------------------------------------
+
+    STORY_CONTENT_TTL_HOURS = 24
+
+    def store_story_content(self, story_hash: str, data: dict) -> bool:
+        """Store story content temporarily for cross-Lambda handoff."""
+        ttl = int(time.time()) + (self.STORY_CONTENT_TTL_HOURS * 3600)
+        try:
+            self._table.put_item(Item={
+                "record_type": "story_content",
+                "identifier": story_hash,
+                "data": data,
+                "ttl": ttl,
+            })
+            return True
+        except Exception as exc:
+            log_structured("ERROR", "Failed to store story content", hash=story_hash, error=str(exc))
+            return False
+
+    def get_story_content(self, story_hash: str) -> dict | None:
+        """Retrieve story content by hash. Returns None if not found."""
+        resp = self._table.get_item(
+            Key={"record_type": "story_content", "identifier": story_hash}
+        )
+        item = resp.get("Item")
+        return item["data"] if item else None
+
+    def get_stories_content(self, story_hashes: list[str]) -> dict[str, dict]:
+        """Batch-fetch story content records. Returns {hash: data} for found items."""
+        if not story_hashes:
+            return {}
+        results = {}
+        for i in range(0, len(story_hashes), 100):
+            chunk = story_hashes[i:i + 100]
+            resp = self._dynamo.batch_get_item(
+                RequestItems={
+                    self._table_name: {
+                        "Keys": [
+                            {"record_type": "story_content", "identifier": h}
+                            for h in chunk
+                        ]
+                    }
+                }
+            )
+            for item in resp.get("Responses", {}).get(self._table_name, []):
+                results[item["identifier"]] = item["data"]
+        return results
