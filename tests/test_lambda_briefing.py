@@ -172,3 +172,74 @@ def test_stories_use_taxonomy_tags_for_raindrop(
     # First call is for the story bookmark; check tags argument
     tags_used = call_kwargs.kwargs.get("tags") or call_kwargs.args[2]
     assert "#ai-research" in tags_used or TaxonomyTag.AI_RESEARCH.value in tags_used
+
+
+@patch("src.lambda_handler.RaindropClient")
+@patch("src.lambda_handler.BedrockBriefingClient")
+@patch("src.lambda_handler.ClassificationService")
+@patch("src.lambda_handler.ProcessingStateStorage")
+@patch("src.lambda_handler.BedrockClassifier")
+@patch("src.lambda_handler.NewsBlurClient")
+@patch("src.lambda_handler.Settings")
+def test_briefing_uses_synthetic_url(
+    mock_settings_cls, mock_nb_cls, mock_bedrock_cls,
+    mock_storage_cls, mock_svc_cls, mock_briefing_cls, mock_raindrop_cls
+):
+    """Briefing bookmark must use a synthetic URL, not a story URL."""
+    mock_settings_cls.return_value = _make_settings(raindrop_token="tok", briefing_collection_id=42)
+
+    story = _make_story(url="https://reddit.com/r/something/post")
+    clf = _make_classification(overall=9, importance=7)
+    mock_result = _make_mock_result([(story, clf)])
+    mock_svc_cls.return_value.run.return_value = mock_result
+
+    mock_briefing_cls.return_value.synthesize.return_value = "Briefing text."
+    mock_raindrop_cls.return_value.check_duplicate.return_value = False
+
+    with patch("dataclasses.asdict", return_value={}):
+        from src import lambda_handler
+        lambda_handler.lambda_handler({}, {})
+
+    # Find the briefing create_bookmark call (not the story one)
+    calls = mock_raindrop_cls.return_value.create_bookmark.call_args_list
+    briefing_call = next(
+        (c for c in calls if "briefing" in (c.kwargs.get("tags") or [])),
+        None
+    )
+    assert briefing_call is not None
+    briefing_url = briefing_call.kwargs.get("url") or briefing_call.args[0]
+    # Must NOT be a story URL
+    assert "reddit.com" not in briefing_url
+    # Must be a synthetic newsblur URL
+    assert "newsblur.com/briefing/" in briefing_url
+
+
+@patch("src.lambda_handler.RaindropClient")
+@patch("src.lambda_handler.BedrockBriefingClient")
+@patch("src.lambda_handler.ClassificationService")
+@patch("src.lambda_handler.ProcessingStateStorage")
+@patch("src.lambda_handler.BedrockClassifier")
+@patch("src.lambda_handler.NewsBlurClient")
+@patch("src.lambda_handler.Settings")
+def test_briefing_skipped_when_duplicate(
+    mock_settings_cls, mock_nb_cls, mock_bedrock_cls,
+    mock_storage_cls, mock_svc_cls, mock_briefing_cls, mock_raindrop_cls
+):
+    """Briefing should not be created if the synthetic URL already exists in Raindrop."""
+    mock_settings_cls.return_value = _make_settings(raindrop_token="tok", briefing_collection_id=42)
+
+    story = _make_story()
+    clf = _make_classification(overall=9, importance=7)
+    mock_result = _make_mock_result([(story, clf)])
+    mock_svc_cls.return_value.run.return_value = mock_result
+
+    mock_briefing_cls.return_value.synthesize.return_value = "Briefing."
+    # Simulate briefing already exists
+    mock_raindrop_cls.return_value.check_duplicate.return_value = True
+
+    with patch("dataclasses.asdict", return_value={}):
+        from src import lambda_handler
+        resp = lambda_handler.lambda_handler({}, {})
+
+    assert resp["body"]["briefing_sent"] == 0
+    mock_briefing_cls.return_value.synthesize.assert_not_called()

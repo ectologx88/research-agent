@@ -129,30 +129,32 @@ def lambda_handler(event, context):
                 try:
                     run_hour_utc = datetime.now(timezone.utc).hour
                     time_of_day = "Morning" if run_hour_utc < 18 else "Evening"
-                    date_str = datetime.now(timezone.utc).strftime("%b %-d, %Y")
-                    briefing_title = f"{time_of_day} Briefing \u2014 {date_str}"
-
-                    briefing_client = BedrockBriefingClient(
-                        region=settings.bedrock_region,
-                        model_id=settings.bedrock_briefing_model_id,
-                    )
-                    briefing_text = briefing_client.synthesize(briefing_stories, run_hour_utc)
-
-                    # Use the first story's URL as the required Raindrop URL
-                    first_url = str(briefing_stories[0][0].story_permalink) if briefing_stories[0][0].story_permalink else "https://newsblur.com"
+                    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    briefing_title = f"{time_of_day} Briefing \u2014 {datetime.now(timezone.utc).strftime('%b %-d, %Y')}"
+                    briefing_url = f"https://newsblur.com/briefing/{date_str}-{time_of_day.lower()}"
 
                     briefing_raindrop = RaindropClient(
                         token=settings.raindrop_token,
                         collection_id=settings.raindrop_briefing_collection_id,
                     )
-                    briefing_raindrop.create_bookmark(
-                        url=first_url,
-                        title=briefing_title,
-                        tags=["briefing", "ai-generated", time_of_day.lower()],
-                        note=briefing_text,
-                    )
-                    briefing_sent = 1
-                    log_structured("INFO", "Briefing bookmark created", title=briefing_title)
+
+                    if briefing_raindrop.check_duplicate(briefing_url):
+                        log_structured("INFO", "Briefing already exists, skipping", url=briefing_url)
+                    else:
+                        briefing_client = BedrockBriefingClient(
+                            region=settings.bedrock_region,
+                            model_id=settings.bedrock_briefing_model_id,
+                        )
+                        briefing_text = briefing_client.synthesize(briefing_stories, run_hour_utc)
+
+                        briefing_raindrop.create_bookmark(
+                            url=briefing_url,
+                            title=briefing_title,
+                            tags=["briefing", "ai-generated", time_of_day.lower()],
+                            note=briefing_text,
+                        )
+                        briefing_sent = 1
+                        log_structured("INFO", "Briefing bookmark created", title=briefing_title)
 
                 except BriefingError as exc:
                     log_structured("ERROR", "Briefing synthesis failed", error=str(exc))

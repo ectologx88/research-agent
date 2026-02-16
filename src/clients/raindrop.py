@@ -80,6 +80,7 @@ class RaindropClient:
             RaindropAuthError: On 401 (credentials invalid — do not retry).
             RaindropError: On persistent failure after retries.
         """
+        url = str(url)
         payload = {
             "link": url,
             "title": title,
