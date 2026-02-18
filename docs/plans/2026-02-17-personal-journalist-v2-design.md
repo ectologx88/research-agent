@@ -128,7 +128,7 @@ ALWAYS_AI_ML = {
 ALWAYS_WORLD = {
     "NYT > Top Stories",
     "BBC News",
-    "https://feeds.reuters.com/reuters/topNews",
+    "Reuters",  # Match on substring — verify exact NewsBlur title on first run and update if needed
     "NPR Topics: News",
     "ProPublica",
     "Houston Public Media",
@@ -216,6 +216,70 @@ if any(kw in title_lower for kw in RDD_KEYWORDS):
     # consciousness, emergence, quantum, information theory, cognitive architecture
     boost_tags.append("long-signal:rdd")
 ```
+
+### Velocity clustering algorithm (Lambda 1)
+
+Pure Python — no ML libraries.
+
+```python
+import re
+from collections import Counter
+
+STOPWORDS = {
+    "the", "and", "for", "that", "this", "with", "from", "have", "will",
+    "are", "was", "been", "has", "its", "into", "over", "says", "said",
+    "new", "can", "may", "also", "more", "than", "but", "not", "how",
+}
+
+def tokenize(title: str) -> set[str]:
+    """Lowercase, strip non-alpha, drop stopwords, keep tokens >= 4 chars."""
+    tokens = re.sub(r"[^a-z0-9 ]", " ", title.lower()).split()
+    return {t for t in tokens if len(t) >= 4 and t not in STOPWORDS}
+
+def compute_clusters(stories: list) -> dict[str, tuple[int, str]]:
+    """
+    Returns: {story_hash: (cluster_size, cluster_key)}
+    cluster_size = number of stories sharing >= 2 tokens with this story
+    cluster_key = most frequent shared token across the cluster
+    """
+    token_sets = {s.story_hash: tokenize(s.story_title) for s in stories}
+    results = {}
+    for story in stories:
+        my_tokens = token_sets[story.story_hash]
+        shared_token_counts: Counter = Counter()
+        cluster_size = 0
+        for other_hash, other_tokens in token_sets.items():
+            if other_hash == story.story_hash:
+                continue
+            shared = my_tokens & other_tokens
+            if len(shared) >= 2:
+                cluster_size += 1
+                shared_token_counts.update(shared)
+        cluster_key = shared_token_counts.most_common(1)[0][0] if shared_token_counts else ""
+        results[story.story_hash] = (cluster_size, cluster_key)
+    return results
+```
+
+- `cluster_size >= 3` → tag as Lead Story candidate; highest-scoring story in cluster wins in Lambda 3
+- `cluster_key` is written to `story_staging` DDB and used by Lambda 3 to group Lead Stories
+- Lambda 3 uses `cluster_size >= 3` to float a story to the top of its section regardless of score rank
+
+### Sub-bucket assignment table
+
+| Feed set | briefing_type | sub_bucket |
+|---|---|---|
+| ALWAYS_AI_ML | AI_ML | "research" |
+| REDDIT_FEEDS → AI_ML | AI_ML | "research" |
+| AMBIGUOUS_FEEDS → AI_ML (keyword) | AI_ML | "research" |
+| ALWAYS_WORLD | WORLD | "news" |
+| ALWAYS_SCIENCE | WORLD | "science" |
+| Ghostbusters News (ALWAYS_ENTERTAINMENT) | WORLD | "entertainment" |
+| Apple Newsroom, 9to5Mac, MacRumors, Google Workspace, The Keyword | WORLD | "tech" |
+| REDDIT_FEEDS → WORLD/science | WORLD | "science" |
+| REDDIT_FEEDS → WORLD/tech | WORLD | "tech" |
+| AMBIGUOUS_FEEDS → WORLD (default) | WORLD | "tech" |
+
+Note: `sub_bucket = "entertainment"` is reserved for Ghostbusters News only. Apple/Google product feeds are `sub_bucket = "tech"` and render as normal `Dispatch: Technology` entries in Zeitgeist, not parenthetical asides.
 
 ---
 
@@ -329,7 +393,15 @@ Boost tags: {boost_tags}
 #   → REJECT: update DDB status="rejected", store reasoning
 #              newsblur_client.mark_as_read(story_hash)
 #
+# Raindrop updates (PASS stories only): use threading.Semaphore(5) to cap
+# concurrent Raindrop API calls at 5. Do not fire-and-forget from ThreadPoolExecutor
+# without the semaphore — flaky behavior under load.
+#
 # If fewer than 3 stories pass threshold → log + bail, do NOT send to briefing-queue
+#   Cleanup: Lambda 1 Raindrop bookmarks for this batch are left as-is (title + tags, no note).
+#   They will drain from story_staging on 24h TTL. This is acceptable — documented behavior,
+#   not a bug. Do not add a cleanup step.
+#
 # Send to briefing-queue: passing story_ids only
 ```
 
@@ -492,7 +564,9 @@ SK: briefing_type (String) — "AI_ML" | "WORLD"
 Lambda 1 writes:
   title (String)
   url (String)
-  content (String)          — story_content from NewsBlur, truncated at 8000 chars
+  content (String)          — story_content from NewsBlur, truncated at 8000 chars.
+                              Truncation: strip at last whitespace boundary before 8000 chars,
+                              append " [truncated]" so Lambda 2 knows it is working with partial content.
   feed_name (String)
   sub_bucket (String)       — research | industry | entertainment | weather | science | tech | news
   boost_tags (List)
@@ -669,6 +743,9 @@ Editorial filter (mock, DRY_RUN=true):
 feedparser>=6.0.10   # Space City Weather + NWS RSS parsing
                      # NOTE: feedparser 6.x has breaking API changes from 5.x
                      # Verify no feedparser 5.x pins elsewhere before adding
+                     # Entry point is still feedparser.parse(url) — unchanged from 5.x.
+                     # Breaking change: use feed.entries (list), NOT feed.items().
+                     # Do not use the 5.x dict-style access pattern.
 ```
 
 No other new runtime dependencies.
