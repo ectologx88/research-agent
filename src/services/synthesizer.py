@@ -1,5 +1,5 @@
 # src/services/synthesizer.py
-"""Briefing synthesizer for Lambda 3. Calls Bedrock Sonnet to generate briefings."""
+"""Briefing synthesizer for Lambda 3. Calls Bedrock Sonnet 4.6 to generate briefings."""
 import json
 from datetime import datetime, timedelta
 
@@ -10,9 +10,9 @@ _DRY_RUN_PLACEHOLDER = "[DRY_RUN] Briefing generation skipped — see prompt in 
 
 
 class BriefingSynthesizer:
-    """Synthesize daily briefings via Sonnet. One instance per Lambda invocation."""
+    """Synthesize daily briefings via Sonnet 4.6. One instance per Lambda invocation."""
 
-    DEFAULT_MODEL_ID = "anthropic.claude-sonnet-4-5-20251009-v3:0"
+    DEFAULT_MODEL_ID = "anthropic.claude-sonnet-4-6"
     MAX_TOKENS = 4096
 
     def __init__(
