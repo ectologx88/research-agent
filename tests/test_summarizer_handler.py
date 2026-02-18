@@ -177,6 +177,8 @@ def test_dry_run_true_uses_mock_scorer_no_writes(
     mock_boto3.client.return_value.send_message.assert_not_called()
     # Raindrop not created
     mock_raindrop_cls.assert_not_called()
+    # NewsBlur not called in dry_run
+    mock_nb_cls.assert_not_called()
 
 
 @patch("src.handlers.summarizer_handler.NewsBlurClient")

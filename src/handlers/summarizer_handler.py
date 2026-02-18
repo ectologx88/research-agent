@@ -161,6 +161,9 @@ def lambda_handler(event, context):
                 }),
             )
             sent = len(passed_stories)
+        else:
+            log("WARNING", "summarizer.no_sqs_url_configured",
+                passed=len(passed_stories), briefing_type=briefing_type)
     else:
         if len(passed_stories) < MIN_STORIES_FOR_BRIEFING:
             log("INFO", "summarizer.bail_threshold",
