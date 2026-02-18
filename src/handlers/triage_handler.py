@@ -14,7 +14,6 @@ from src.config import Settings
 from src.services.context_loader import ContextLoader
 from src.services.triage import Bucket, TriageService
 from src.services.velocity import compute_clusters
-import time as _time
 from src.utils import utcnow
 
 
@@ -50,13 +49,13 @@ def lambda_handler(event, context):
         log("WARNING", "context_loader.failed", error=str(exc))
 
     # 2. Fetch stories
-    _t0 = _time.time()
+    _t0 = time.time()
     stories = newsblur.fetch_unread_stories(
         min_score=settings.newsblur_min_score,
         max_results=settings.max_stories_per_run,
     )
     log("INFO", "newsblur.fetch.complete",
-        elapsed_ms=int((_time.time() - _t0) * 1000), count=len(stories))
+        elapsed_ms=int((time.time() - _t0) * 1000), count=len(stories))
 
     # 3. Triage all stories
     buckets = triage.batch_categorize(stories)
