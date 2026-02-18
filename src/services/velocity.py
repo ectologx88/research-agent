@@ -6,36 +6,21 @@ cluster_size >= 3 → Lead Story candidate in Lambda 3.
 """
 import re
 from collections import Counter
-from typing import Any
 
 STOPWORDS = {
     "the", "and", "for", "that", "this", "with", "from", "have", "will",
     "are", "was", "been", "has", "its", "into", "over", "says", "said",
     "new", "can", "may", "also", "more", "than", "but", "not", "how",
-    "what", "when", "why", "who", "all", "about", "after", "first",
-    "being", "which", "their", "here", "would", "could", "make",
 }
 
 
 def _tokenize(title: str) -> set[str]:
-    """Lowercase, strip non-alphanumeric, drop stopwords and short tokens.
-
-    Applies naive suffix-stripping (trailing 's') so that 'benchmarks'
-    and 'benchmark' are treated as the same token.
-    """
+    """Lowercase, strip non-alphanumeric, drop stopwords and short tokens."""
     tokens = re.sub(r"[^a-z0-9 ]", " ", title.lower()).split()
-    result = set()
-    for t in tokens:
-        if len(t) < 4 or t in STOPWORDS:
-            continue
-        # Naive plural normalisation: strip trailing 's' when result >= 4 chars
-        if t.endswith("s") and len(t) > 4:
-            t = t[:-1]
-        result.add(t)
-    return result
+    return {t for t in tokens if len(t) >= 4 and t not in STOPWORDS}
 
 
-def compute_clusters(stories: list[Any]) -> dict[str, tuple[int, str]]:
+def compute_clusters(stories: list) -> dict[str, tuple[int, str]]:
     """
     Compute cluster_size and cluster_key for each story.
 
