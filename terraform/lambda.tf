@@ -151,7 +151,7 @@ resource "aws_lambda_function" "briefing" {
       DYNAMODB_SIGNAL_TABLE        = aws_dynamodb_table.signal_tracker.name
       DYNAMODB_BRIEFING_TABLE      = aws_dynamodb_table.briefing_archive.name
       BEDROCK_REGION               = "us-east-1"
-      BEDROCK_BRIEFING_MODEL_ID    = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      BEDROCK_BRIEFING_MODEL_ID    = "us.anthropic.claude-sonnet-4-6"
     }
   }
 
