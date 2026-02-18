@@ -6,7 +6,7 @@ import uuid
 import boto3
 
 from config.scoring_weights import CONTENT_TRUNCATE_CHARS
-from shared.dynamodb_client import StoryStaging
+from shared.dynamodb_client import StoryStaging, SignalTracker
 from shared.logger import log
 from src.clients.newsblur import NewsBlurClient
 from src.clients.raindrop import RaindropClient, RaindropAuthError
@@ -31,7 +31,8 @@ def _truncate_content(content: str, max_chars: int = CONTENT_TRUNCATE_CHARS) -> 
 def lambda_handler(event, context):
     execution_id = str(uuid.uuid4())
     settings = Settings()
-    dry_run = settings.dry_run == "true"
+    # Treat any value other than explicit "false" as dry-run (no writes).
+    dry_run = settings.dry_run != "false"
     log("INFO", "triage_pipeline.start", execution_id=execution_id, dry_run=dry_run)
 
     newsblur = NewsBlurClient(settings.newsblur_username, settings.newsblur_password)
@@ -39,6 +40,7 @@ def lambda_handler(event, context):
     sqs = boto3.client("sqs", region_name=settings.dynamodb_region)
     dynamodb = boto3.resource("dynamodb", region_name=settings.dynamodb_region)
     story_staging = StoryStaging(dynamodb.Table(settings.dynamodb_story_staging_table))
+    signal_tracker = SignalTracker(dynamodb.Table(settings.dynamodb_signal_table))
 
     # 1. Load context block once per run
     context_block_json = "{}"
@@ -53,6 +55,7 @@ def lambda_handler(event, context):
     stories = newsblur.fetch_unread_stories(
         min_score=settings.newsblur_min_score,
         max_results=settings.max_stories_per_run,
+        hours_back=settings.newsblur_hours_back,
     )
     log("INFO", "newsblur.fetch.complete",
         elapsed_ms=int((time.time() - _t0) * 1000), count=len(stories))
@@ -62,6 +65,21 @@ def lambda_handler(event, context):
     ai_ml_stories = buckets[Bucket.AI_ML]
     world_stories = buckets[Bucket.WORLD]
     skip_stories = buckets[Bucket.SKIP]
+
+    # Apply per-stream caps before clustering and processing
+    try:
+        max_ai_ml = int(getattr(settings, "max_ai_ml_stories", 0))
+    except (TypeError, ValueError):
+        max_ai_ml = 0
+    if max_ai_ml > 0:
+        ai_ml_stories = ai_ml_stories[:max_ai_ml]
+
+    try:
+        max_world = int(getattr(settings, "max_world_stories", 0))
+    except (TypeError, ValueError):
+        max_world = 0
+    if max_world > 0:
+        world_stories = world_stories[:max_world]
 
     # 4. Velocity clustering on routed stories
     routed = [s for s, _ in ai_ml_stories + world_stories]
@@ -90,6 +108,7 @@ def lambda_handler(event, context):
         bucket_name="ai-ml",
         raindrop=raindrop_aiml,
         story_staging=story_staging,
+        signal_tracker=signal_tracker,
         triage=triage,
         cluster_map=cluster_map,
         context_block_json=context_block_json,
@@ -101,6 +120,7 @@ def lambda_handler(event, context):
         bucket_name="world",
         raindrop=raindrop_world,
         story_staging=story_staging,
+        signal_tracker=signal_tracker,
         triage=triage,
         cluster_map=cluster_map,
         context_block_json=context_block_json,
@@ -142,7 +162,7 @@ def lambda_handler(event, context):
 
 
 def _process_stream(stories, briefing_type, bucket_name, raindrop, story_staging,
-                    triage, cluster_map, context_block_json, dry_run):
+                    signal_tracker, triage, cluster_map, context_block_json, dry_run):
     """Process one briefing stream. Returns list of stored story hashes."""
     hashes = []
     for story, sub_bucket in stories:
@@ -160,6 +180,10 @@ def _process_stream(stories, briefing_type, bucket_name, raindrop, story_staging
             boost_tags = triage.get_boost_tags(story)
             cluster_size, cluster_key = cluster_map.get(story.story_hash, (0, ""))
             content = _truncate_content(story.story_content or "")
+
+            # Upsert signal tracker for non-empty cluster keys
+            if not dry_run and cluster_key:
+                signal_tracker.upsert(cluster_key, story.story_hash)
 
             # Save to Raindrop
             raindrop_id = None

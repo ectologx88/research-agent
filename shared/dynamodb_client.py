@@ -82,12 +82,33 @@ class StoryStaging:
     def batch_get_stories(
         self, story_hashes: list[str], briefing_type: str
     ) -> list[dict]:
-        """Fetch multiple stories. Returns only items found."""
-        results = []
-        for h in story_hashes:
-            item = self.get_story(h, briefing_type)
-            if item:
-                results.append(item)
+        """Fetch multiple stories using BatchGetItem. Returns only items found."""
+        if not story_hashes:
+            return []
+
+        table_name = self._table.name
+        client = self._table.meta.client
+
+        keys = [
+            {"story_hash": h, "briefing_type": briefing_type}
+            for h in story_hashes
+        ]
+
+        results: list[dict] = []
+
+        # DynamoDB BatchGetItem supports up to 100 keys per table per request.
+        for i in range(0, len(keys), 100):
+            batch_keys = keys[i : i + 100]
+            request_items = {table_name: {"Keys": batch_keys}}
+
+            while request_items:
+                response = client.batch_get_item(RequestItems=request_items)
+                items = response.get("Responses", {}).get(table_name, [])
+                results.extend(items)
+
+                unprocessed = response.get("UnprocessedKeys", {})
+                request_items = unprocessed if unprocessed and unprocessed.get(table_name, {}).get("Keys") else {}
+
         return results
 
     def check_duplicate(self, story_hash: str, briefing_type: str) -> bool:
