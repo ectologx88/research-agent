@@ -18,11 +18,33 @@ class TestPriorBriefingLookup:
 
 
 class TestBriefingTypeBranching:
-    def test_equalizer_gets_no_context_block(self):
-        synth = MagicMock(spec=BriefingSynthesizer)
-        synth._prior_briefing_key = BriefingSynthesizer._prior_briefing_key.__get__(synth)
-        # Verify build_prompt_for_type routes AI_ML to equalizer path
-        pass
+    @patch("src.services.synthesizer.build_zeitgeist_prompt")
+    @patch("src.services.synthesizer.build_equalizer_prompt")
+    def test_equalizer_gets_no_context_block(self, mock_eq, mock_zg):
+        """AI_ML briefing_type routes to build_equalizer_prompt, not Zeitgeist."""
+        mock_eq.return_value = "eq_prompt"
+        synth = BriefingSynthesizer(dry_run=True)
+        synth.synthesize(
+            stories=[], run_date="2026-02-17", time_of_day="AM",
+            briefing_type="AI_ML", context_block="ctx",
+            signals=[], prior_briefing=None,
+        )
+        mock_eq.assert_called_once()
+        mock_zg.assert_not_called()
 
-    def test_zeitgeist_gets_context_block(self):
-        pass
+    @patch("src.services.synthesizer.build_zeitgeist_prompt")
+    @patch("src.services.synthesizer.build_equalizer_prompt")
+    def test_zeitgeist_gets_context_block(self, mock_eq, mock_zg):
+        """WORLD briefing_type routes to build_zeitgeist_prompt with context_block."""
+        mock_zg.return_value = "zg_prompt"
+        synth = BriefingSynthesizer(dry_run=True)
+        synth.synthesize(
+            stories=[], run_date="2026-02-17", time_of_day="AM",
+            briefing_type="WORLD", context_block="SYSTEM_CONTEXT_BLOCK test",
+            signals=[], prior_briefing=None,
+        )
+        mock_zg.assert_called_once()
+        mock_eq.assert_not_called()
+        # context_block is passed to build_zeitgeist_prompt
+        _, kwargs = mock_zg.call_args
+        assert kwargs.get("context_block") == "SYSTEM_CONTEXT_BLOCK test"
