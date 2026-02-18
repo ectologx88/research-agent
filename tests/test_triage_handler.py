@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 
-def _make_story(feed="arXiv AI", title="Neural nets", url="https://arxiv.org/1", hash="h1"):
+def _make_story(feed="cs.AI updates on arXiv.org", title="Neural nets", url="https://arxiv.org/1", hash="h1"):
     s = MagicMock()
     s.story_feed_title = feed
     s.story_title = title
@@ -36,7 +36,7 @@ def test_routes_aiml_story_to_aiml_collection(
     settings.dynamodb_region = "us-east-1"
     mock_settings_cls.return_value = settings
 
-    story = _make_story(feed="arXiv AI", hash="h1")
+    story = _make_story(feed="cs.AI updates on arXiv.org", hash="h1")
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_storage_cls.return_value.batch_check_processed.return_value = set()
     mock_storage_cls.return_value.store_story_content.return_value = True
@@ -73,7 +73,7 @@ def test_skip_stories_are_not_saved(
     settings.dynamodb_region = "us-east-1"
     mock_settings_cls.return_value = settings
 
-    story = _make_story(feed="ESPN", title="Game recap")
+    story = _make_story(feed="AI / Raindrop.io", title="Game recap")
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_storage_cls.return_value.batch_check_processed.return_value = set()
 
