@@ -22,7 +22,9 @@ Refactor the research-agent from a content aggregator into a dual-stream daily "
 - `src/clients/` — `newsblur.py`, `raindrop.py`, Bedrock clients
 - `src/services/` — enhanced in place
 - `terraform/` — existing files updated, new files added
-- **Bedrock for all LLM calls** (Haiku for Lambda 2, Sonnet 4.5 for Lambda 3) — no switch to direct Anthropic API
+- **Bedrock for all LLM calls** (Haiku for Lambda 2, ~~Sonnet 4.5~~ **Sonnet 4.6** for Lambda 3) — no switch to direct Anthropic API
+
+> **Model upgrade note (2026-02-17):** Updated from Sonnet 4.5 → 4.6. See `docs/plans/2026-02-17-upgrade-briefing-model-sonnet-4-6.md`.
 
 **What gets added:**
 ```

@@ -212,6 +212,8 @@ Skips sending if fewer than 3 stories passed threshold.
 **Timeout:** 300s
 **Model:** Claude Sonnet 4.5 (`us.anthropic.claude-sonnet-4-5-20250929-v1:0`)
 
+> **Model upgrade note (2026-02-17):** Production now uses Sonnet 4.6. See `docs/plans/2026-02-17-upgrade-briefing-model-sonnet-4-6.md`.
+
 ### AI/ML Briefing Sections
 1. **Executive Summary** — 3-5 bullets, most critical items
 2. **Key Research** — top papers/findings with context
