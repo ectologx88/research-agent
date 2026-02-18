@@ -29,7 +29,7 @@ You need two Bedrock-specific IDs:
    - Expected: `anthropic.claude-sonnet-4-6-20250514-v1:0`
    - Or: `aws bedrock list-foundation-models --region us-east-1 | grep sonnet-4-6`
 
-Substitute the real IDs everywhere `INFERENCE_PROFILE_ID` and `DIRECT_MODEL_ID` appear below.
+Substitute the real IDs everywhere `us.anthropic.claude-sonnet-4-6` and `anthropic.claude-sonnet-4-6` appear below.
 
 ---
 
@@ -55,7 +55,7 @@ In `tests/test_config.py`, change line 45:
 assert s.bedrock_briefing_model_id == "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
 # After
-assert s.bedrock_briefing_model_id == "INFERENCE_PROFILE_ID"
+assert s.bedrock_briefing_model_id == "us.anthropic.claude-sonnet-4-6"
 # e.g. "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
 ```
 
@@ -64,7 +64,7 @@ assert s.bedrock_briefing_model_id == "INFERENCE_PROFILE_ID"
 ```bash
 pytest tests/test_config.py::test_bedrock_briefing_model_id_default -v
 ```
-Expected: FAIL — `AssertionError: assert 'us.anthropic.claude-sonnet-4-5-20250929-v1:0' == 'INFERENCE_PROFILE_ID'`
+Expected: FAIL — `AssertionError: assert 'us.anthropic.claude-sonnet-4-5-20250929-v1:0' == 'us.anthropic.claude-sonnet-4-6'`
 
 **Step 4: Update `src/config.py`**
 
@@ -73,7 +73,7 @@ Expected: FAIL — `AssertionError: assert 'us.anthropic.claude-sonnet-4-5-20250
 bedrock_briefing_model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
 # After
-bedrock_briefing_model_id: str = "INFERENCE_PROFILE_ID"
+bedrock_briefing_model_id: str = "us.anthropic.claude-sonnet-4-6"
 # e.g. "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
 ```
 
@@ -116,7 +116,7 @@ Note: this uses the **direct** Bedrock model ID format (no `us.` prefix), not th
 DEFAULT_MODEL_ID = "anthropic.claude-sonnet-4-5-20251009-v3:0"
 
 # After
-DEFAULT_MODEL_ID = "DIRECT_MODEL_ID"
+DEFAULT_MODEL_ID = "anthropic.claude-sonnet-4-6"
 # e.g. "anthropic.claude-sonnet-4-6-20250514-v1:0"
 ```
 
@@ -167,7 +167,7 @@ git commit -m "feat: update synthesizer DEFAULT_MODEL_ID to Sonnet 4.6"
 BEDROCK_BRIEFING_MODEL_ID    = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
 # After
-BEDROCK_BRIEFING_MODEL_ID    = "INFERENCE_PROFILE_ID"
+BEDROCK_BRIEFING_MODEL_ID    = "us.anthropic.claude-sonnet-4-6"
 # e.g. "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
 ```
 
@@ -205,7 +205,7 @@ Find line 60 (contains `us.anthropic.claude-sonnet-4-5-20250929-v1:0`). Insert d
 
 ```markdown
 > **Model upgrade note (2026-02-17):** Production now uses Sonnet 4.6
-> (`INFERENCE_PROFILE_ID`). See `docs/plans/2026-02-17-upgrade-briefing-model-sonnet-4-6.md`.
+> (`us.anthropic.claude-sonnet-4-6`). See `docs/plans/2026-02-17-upgrade-briefing-model-sonnet-4-6.md`.
 ```
 
 **Step 2: Add same callout to `2026-02-16-phase-3-design.md`**
@@ -214,7 +214,7 @@ Find line 213 (contains `Claude Sonnet 4.5`). Insert directly after it:
 
 ```markdown
 > **Model upgrade note (2026-02-17):** Production now uses Sonnet 4.6
-> (`INFERENCE_PROFILE_ID`). See `docs/plans/2026-02-17-upgrade-briefing-model-sonnet-4-6.md`.
+> (`us.anthropic.claude-sonnet-4-6`). See `docs/plans/2026-02-17-upgrade-briefing-model-sonnet-4-6.md`.
 ```
 
 **Step 3: Add same callout to `2026-02-17-personal-journalist-v2-design.md`**
