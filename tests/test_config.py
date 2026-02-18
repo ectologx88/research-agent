@@ -42,7 +42,7 @@ def test_bedrock_briefing_model_id_default(monkeypatch):
     monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
     monkeypatch.delenv("BEDROCK_BRIEFING_MODEL_ID", raising=False)
     s = Settings()
-    assert s.bedrock_briefing_model_id == "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    assert s.bedrock_briefing_model_id == "us.anthropic.claude-sonnet-4-6"
 
 
 def test_aiml_collection_id_defaults_to_minus_one(monkeypatch):

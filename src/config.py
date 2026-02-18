@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     sqs_briefing_queue_url: str = ""
 
     # Briefing synthesis
-    bedrock_briefing_model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    bedrock_briefing_model_id: str = "us.anthropic.claude-sonnet-4-6"
 
     # Summarizer thresholds
     summarizer_aiml_min_score: int = 6
