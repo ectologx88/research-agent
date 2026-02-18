@@ -150,6 +150,10 @@ def test_archive_written_after_raindrop(
     store_kwargs = mock_archive_cls.return_value.store_briefing.call_args[1]
     assert store_kwargs["briefing_date"] == "2026-02-17-AM"
     assert store_kwargs["briefing_type"] == "AI_ML"
+    assert store_kwargs["content"] == "Briefing text."
+    assert store_kwargs["raindrop_id"] == "42"   # must be str, not int
+    assert store_kwargs["candidate_count"] == 5
+    assert store_kwargs["story_count"] == 1
 
 
 @patch("src.handlers.briefing_handler.BriefingArchive")

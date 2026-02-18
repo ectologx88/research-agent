@@ -35,6 +35,8 @@ def lambda_handler(event, context):
     )
     briefing_url = f"https://newsblur.com/briefing/{briefing_date}-{briefing_type}"
 
+    # Duplicate guard is Raindrop-based: only active when Raindrop is configured.
+    # When raindrop_token is unset, no dedup check is possible — proceed without it.
     raindrop = None
     if do_writes and settings.raindrop_token:
         raindrop = RaindropClient(token=settings.raindrop_token, collection_id=collection_id)
