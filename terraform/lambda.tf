@@ -152,7 +152,7 @@ resource "aws_lambda_function" "briefing" {
   role          = aws_iam_role.lambda.arn
   handler       = "src.handlers.briefing_handler.lambda_handler"
   runtime       = "python3.12"
-  timeout       = 300
+  timeout       = 600
   memory_size   = 256
 
   filename         = "${path.module}/../dist/lambda.zip"
