@@ -192,3 +192,43 @@ def test_candidate_count_in_sqs_message(
     body = json.loads(sqs_mock.send_message.call_args[1]["MessageBody"])
     assert "candidate_count" in body
     assert "briefing_date" in body
+
+
+@patch("src.handlers.triage_handler.ContextLoader")
+@patch("src.handlers.triage_handler.boto3")
+@patch("src.handlers.triage_handler.RaindropClient")
+@patch("src.handlers.triage_handler.StoryStaging")
+@patch("src.handlers.triage_handler.NewsBlurClient")
+@patch("src.handlers.triage_handler.Settings")
+def test_hn_velocity_high_adds_boost_tag(
+    mock_settings_cls, mock_nb_cls, mock_staging_cls, mock_raindrop_cls,
+    mock_boto3, mock_context_cls,
+):
+    """Stories with 200+ HN points get velocity:hn-high in stored boost_tags."""
+    mock_settings_cls.return_value = _default_settings()
+    story = _make_story(
+        feed="cs.AI updates on arXiv.org",
+        title="Major open-source LLM release",
+        hash="h_hn1",
+    )
+    mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
+    mock_staging_cls.return_value.check_duplicate.return_value = False
+    mock_raindrop_cls.return_value.check_duplicate.return_value = False
+    mock_raindrop_cls.return_value.create_bookmark.return_value = {"_id": 10}
+    mock_context_cls.return_value.fetch_all.return_value = {}
+
+    with patch("src.handlers.triage_handler._check_hn_velocity", return_value=250):
+        handler_mod.lambda_handler({}, {})
+
+    call_args = mock_staging_cls.return_value.store_story.call_args[0][0]
+    assert "velocity:hn-high" in call_args["boost_tags"]
+
+
+def test_hn_velocity_failure_does_not_raise():
+    """HN API failure never propagates -- _check_hn_velocity returns 0 silently."""
+    import urllib.request
+    from unittest.mock import patch
+    with patch("urllib.request.urlopen", side_effect=Exception("network error")):
+        from src.handlers.triage_handler import _check_hn_velocity
+        result = _check_hn_velocity("https://example.com/story")
+    assert result == 0

@@ -28,6 +28,35 @@ def _truncate_content(content: str, max_chars: int = CONTENT_TRUNCATE_CHARS) -> 
     return truncated + " [truncated]"
 
 
+
+def _check_hn_velocity(url: str) -> int:
+    """
+    Query HN Algolia API for point score of this URL.
+    Returns 0 on any failure -- never blocks triage.
+    Free API, no key required, 2s timeout.
+    """
+    import urllib.request
+    import urllib.parse
+    import json as _json
+
+    try:
+        encoded = urllib.parse.quote(url, safe="")
+        api_url = (
+            f"https://hn.algolia.com/api/v1/search"
+            f"?query={encoded}"
+            f"&restrictSearchableAttributes=url"
+            f"&hitsPerPage=1"
+        )
+        req = urllib.request.Request(api_url, headers={"User-Agent": "research-agent/1.0"})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            data = _json.loads(resp.read())
+        hits = data.get("hits", [])
+        if hits:
+            return int(hits[0].get("points") or 0)
+    except Exception:
+        pass  # never raise -- HN lookup is best-effort
+    return 0
+
 def lambda_handler(event, context):
     execution_id = str(uuid.uuid4())
     settings = Settings()
@@ -179,6 +208,13 @@ def _process_stream(stories, briefing_type, bucket_name, raindrop, story_staging
 
             # Compute derived fields
             boost_tags = triage.get_boost_tags(story)
+            # HN velocity -- best-effort, never blocks routing
+            if briefing_type == "AI_ML":
+                hn_score = _check_hn_velocity(str(story.story_permalink))
+                if hn_score >= 200:
+                    boost_tags.append("velocity:hn-high")
+                elif hn_score >= 50:
+                    boost_tags.append("velocity:hn-medium")
             cluster_size, cluster_key = cluster_map.get(story.story_hash, (0, ""))
             content = _truncate_content(story.story_content or "")
 
