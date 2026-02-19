@@ -129,7 +129,9 @@ class ScoringResult:
     @classmethod
     def from_json(cls, raw: str) -> "ScoringResult":
         try:
-            data = json.loads(raw)
+            # raw_decode stops at the end of the first valid JSON object,
+            # tolerating trailing newlines or extra text Haiku sometimes appends.
+            data, _ = json.JSONDecoder().raw_decode(raw.strip())
         except json.JSONDecodeError as exc:
             raise ValueError(f"Haiku returned invalid JSON: {exc}\nRaw: {raw[:200]}") from exc
         required = {"integrity", "relevance", "novelty", "total", "decision",

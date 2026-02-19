@@ -114,7 +114,7 @@ def lambda_handler(event, context):
             "reasoning": result.reasoning,
             "sub_bucket": item.get("sub_bucket", ""),
             "boost_tags": boost_tags,
-            "cluster_size": item.get("cluster_size", 0),
+            "cluster_size": int(item.get("cluster_size") or 0),
             "cluster_key": item.get("cluster_key", ""),
             "context_block": item.get("context_block", "{}"),
             "feed_name": item.get("feed_name", ""),
@@ -124,7 +124,7 @@ def lambda_handler(event, context):
                 "novelty": result.novelty,
                 "total": result.total,
             },
-            "raindrop_id": item.get("raindrop_id"),
+            "raindrop_id": int(item["raindrop_id"]) if item.get("raindrop_id") is not None else None,
         }, None)
 
     rejected_hashes = []
