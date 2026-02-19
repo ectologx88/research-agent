@@ -159,12 +159,12 @@ def test_context_block_stored_with_stories(
     mock_raindrop_cls.return_value.check_duplicate.return_value = False
     mock_raindrop_cls.return_value.create_bookmark.return_value = {"_id": 2}
     mock_context_cls.return_value.fetch_all.return_value = {"weather": {"temp_f": 72.0}}
+    mock_context_cls.return_value.format_context_block.return_value = "WEATHER:\nCurrent: 72.0°F"
 
     handler_mod.lambda_handler({}, {})
 
     call_args = mock_staging_cls.return_value.store_story.call_args[0][0]
-    context = json.loads(call_args["context_block"])
-    assert context["weather"]["temp_f"] == 72.0
+    assert "72.0" in call_args["context_block"]
 
 
 @patch("src.handlers.triage_handler.ContextLoader")

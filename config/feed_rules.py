@@ -104,6 +104,9 @@ AI_ML_KEYWORDS = {
     "embedding model", "language model", "ai agent",
     "multimodal", "agentic", "benchmark", "preprint",
     "inference", "rlhf", "rag",
+    # AI company names — catches "OpenAI releases...", "Anthropic's...", etc.
+    "openai", "anthropic", "deepmind", "perplexity", "cohere", "midjourney",
+    "stability ai", "hugging face", "nvidia ai", "copilot", "sora", "veo",
 }
 
 

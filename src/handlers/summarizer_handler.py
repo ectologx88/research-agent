@@ -5,7 +5,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import boto3
 
-from config.scoring_weights import MIN_STORIES_FOR_BRIEFING
+from config.scoring_weights import (
+    MIN_STORIES_FOR_BRIEFING,
+    MAX_BRIEFING_AI_ML_STORIES,
+    MAX_BRIEFING_WORLD_STORIES,
+)
 from shared.dynamodb_client import StoryStaging
 from shared.logger import log
 from src.clients.newsblur import NewsBlurClient
@@ -148,6 +152,11 @@ def lambda_handler(event, context):
             log("INFO", "summarizer.newsblur_marked_read", count=len(rejected_hashes))
         except Exception as exc:
             log("WARNING", "summarizer.newsblur_mark_failed", error=str(exc))
+
+    # Rank by score and cap before sending — keeps briefing prompts a manageable size.
+    briefing_cap = MAX_BRIEFING_AI_ML_STORIES if briefing_type == "AI_ML" else MAX_BRIEFING_WORLD_STORIES
+    passed_stories.sort(key=lambda s: s["scores"]["total"], reverse=True)
+    passed_stories = passed_stories[:briefing_cap]
 
     # Send to briefing queue — always brief if at least one story passed.
     # Log thin_briefing warning when below preferred minimum so it's visible in metrics.

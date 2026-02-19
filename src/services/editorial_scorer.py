@@ -83,6 +83,10 @@ relevant (Ghostbusters collectibles, Apple ecosystem, sci-fi/speculative fiction
 or relevant to the Wake series Seth is writing.
 EXCLUDE: entertainment that is merely a product announcement without cultural
 weight or personal hook.
+EXCLUDE: AI/ML model releases, LLM benchmarks, AI research papers, and AI company
+product announcements — these belong in the AI Abstract, not this brief. A story
+is about AI/ML if its primary subject is a model, benchmark, training run, or AI
+company product. Exception: broad societal/policy impact of AI is WORLD-relevant.
 
 NOVELTY: Is this genuinely new, or a daily churn story that will look the same tomorrow?
 

@@ -43,10 +43,11 @@ def lambda_handler(event, context):
     signal_tracker = SignalTracker(dynamodb.Table(settings.dynamodb_signal_table))
 
     # 1. Load context block once per run
-    context_block_json = "{}"
+    context_block_json = ""
     try:
-        context_data = ContextLoader().fetch_all()
-        context_block_json = json.dumps(context_data)
+        loader = ContextLoader()
+        context_data = loader.fetch_all()
+        context_block_json = loader.format_context_block(context_data)
     except Exception as exc:
         log("WARNING", "context_loader.failed", error=str(exc))
 
