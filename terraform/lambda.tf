@@ -79,15 +79,15 @@ resource "aws_lambda_function" "triage" {
       DYNAMODB_SIGNAL_TABLE          = aws_dynamodb_table.signal_tracker.name
       FETCH_STRATEGY                 = "hours_back"
       NEWSBLUR_HOURS_BACK            = "12"
-      MAX_STORIES_PER_RUN            = "150"
+      MAX_STORIES_PER_RUN            = "400"
       MARK_AS_READ                   = "false"
       RAINDROP_AIML_COLLECTION_ID    = data.aws_ssm_parameter.raindrop_aiml_collection_id.value
       RAINDROP_WORLD_COLLECTION_ID   = data.aws_ssm_parameter.raindrop_world_collection_id.value
       SQS_AIML_QUEUE_URL             = aws_sqs_queue.ai_ml.url
       SQS_WORLD_QUEUE_URL            = aws_sqs_queue.world.url
       NEWSBLUR_MIN_SCORE             = "1"
-      MAX_AI_ML_STORIES              = "15"
-      MAX_WORLD_STORIES              = "10"
+      MAX_AI_ML_STORIES              = "40"
+      MAX_WORLD_STORIES              = "20"
     }
   }
 
@@ -168,7 +168,7 @@ resource "aws_lambda_function" "briefing" {
       DYNAMODB_SIGNAL_TABLE        = aws_dynamodb_table.signal_tracker.name
       DYNAMODB_BRIEFING_TABLE      = aws_dynamodb_table.briefing_archive.name
       BEDROCK_REGION               = "us-east-1"
-      BEDROCK_BRIEFING_MODEL_ID    = "us.anthropic.claude-sonnet-4-6"
+      BEDROCK_BRIEFING_MODEL_ID    = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     }
   }
 
