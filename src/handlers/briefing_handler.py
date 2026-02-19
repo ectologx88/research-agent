@@ -1,6 +1,7 @@
 """Lambda 3: Synthesize narrative briefing and publish."""
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import boto3
@@ -29,18 +30,29 @@ def _extract_summary(briefing_text: str) -> str:
     return briefing_text[:500]
 
 
+def _source_from_url(url: str) -> str:
+    """Derive a human-readable source label from a URL's hostname."""
+    try:
+        host = urllib.parse.urlparse(url).hostname or ""
+        return host.removeprefix("www.")
+    except Exception:
+        return ""
+
+
 def _build_items(stories: list) -> list:
     """Map story dicts to BriefItem dicts for the ingest payload."""
-    return [
-        {
+    items = []
+    for s in stories:
+        if not s.get("url") or not s.get("summary"):
+            continue
+        source = s.get("feed_name", "") or _source_from_url(s["url"])
+        items.append({
             "title": s["title"],
             "url": s["url"],
-            "source": s.get("feed_name", ""),
-            "snippet": s.get("summary", ""),
-        }
-        for s in stories
-        if s.get("url") and s.get("summary")
-    ]
+            "source": source,
+            "snippet": s["summary"],
+        })
+    return items
 
 
 def _post_to_site(settings: Settings, briefing_date: str, stories: list,
@@ -74,8 +86,8 @@ def _post_to_site(settings: Settings, briefing_date: str, stories: list,
     except urllib.error.HTTPError as exc:
         status = exc.code
 
-    if status == 201:
-        log("INFO", "briefing.site_ingest_created", briefing_date=briefing_date)
+    if status in (200, 201):
+        log("INFO", "briefing.site_ingest_ok", briefing_date=briefing_date)
     elif status == 409:
         log("INFO", "briefing.site_ingest_duplicate", briefing_date=briefing_date)
     else:
