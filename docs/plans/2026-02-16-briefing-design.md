@@ -59,6 +59,8 @@ This gates compute cost and focuses the briefing on material Seth actually cares
 
 Model: `us.anthropic.claude-sonnet-4-5-20250929-v1:0` (Sonnet 4.5 inference profile)
 
+> **Model upgrade note (2026-02-17):** Production now uses Sonnet 4.6. See `docs/plans/2026-02-17-upgrade-briefing-model-sonnet-4-6.md`.
+
 System prompt: Seth's full reader profile (AI adoption consultant, RDD framework developer, autism/ADHD context, journalistic integrity standards, communication preferences).
 
 The briefing prompt passes filtered stories (title, source, scores, tags, summary, key concepts) and requests a **5-section narrative briefing**:

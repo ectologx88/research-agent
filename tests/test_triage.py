@@ -1,82 +1,114 @@
-from src.services.triage import TriageService, Bucket
+"""Tests for TriageService. Feed names match actual NewsBlur subscriptions
+defined in config/feed_rules.py — do not use invented names here."""
+from unittest.mock import MagicMock
+
+from src.services.triage import Bucket, TriageService
+
+
+def _story(feed_title, story_title="Some title"):
+    s = MagicMock()
+    s.story_feed_title = feed_title
+    s.story_title = story_title
+    return s
+
 
 class TestFeedNameRules:
-    def _story(self, feed_title, story_title="Some title"):
-        from unittest.mock import MagicMock
-        s = MagicMock()
-        s.story_feed_title = feed_title
-        s.story_title = story_title
-        return s
-
-    def test_arxiv_feed_routes_to_ai_ml(self):
+    def test_arxiv_ai_routes_to_ai_ml(self):
         svc = TriageService()
-        assert svc.categorize(self._story("arXiv AI")) == Bucket.AI_ML
+        assert svc.categorize(_story("cs.AI updates on arXiv.org")) == Bucket.AI_ML
 
-    def test_bbc_feed_routes_to_world(self):
+    def test_bbc_routes_to_world(self):
         svc = TriageService()
-        assert svc.categorize(self._story("BBC News")) == Bucket.WORLD
+        assert svc.categorize(_story("BBC News")) == Bucket.WORLD
 
-    def test_espn_routes_to_skip(self):
+    def test_newsblur_blog_routes_to_skip(self):
         svc = TriageService()
-        assert svc.categorize(self._story("ESPN")) == Bucket.SKIP
+        assert svc.categorize(_story("The NewsBlur Blog")) == Bucket.SKIP
 
-    def test_weather_feed_routes_to_world_with_weather_sub(self):
+    def test_raindrop_feed_routes_to_skip(self):
         svc = TriageService()
-        bucket, sub = svc.categorize_with_sub(self._story("Weather Underground"))
-        assert bucket == Bucket.WORLD
-        assert sub == "weather"
+        assert svc.categorize(_story("AI / Raindrop.io")) == Bucket.SKIP
 
-
-    def test_none_sub_feed_still_uses_feed_bucket_not_keyword(self):
-        # If we had a feed with sub=None, a matching title keyword shouldn't override the bucket
-        # Test with a known skip feed that has keywords in title
+    def test_space_city_weather_routes_to_world(self):
         svc = TriageService()
-        result = svc.categorize(self._story("ESPN", story_title="New LLM released"))
-        assert result == Bucket.SKIP  # ESPN beats LLM keyword
-
-class TestKeywordFallback:
-    def _story(self, title, feed="Unknown Feed"):
-        from unittest.mock import MagicMock
-        s = MagicMock()
-        s.story_feed_title = feed
-        s.story_title = title
-        return s
-
-    def test_llm_keyword_routes_to_ai_ml(self):
-        svc = TriageService()
-        assert svc.categorize(self._story("New LLM beats GPT-4 on benchmarks")) == Bucket.AI_ML
-
-    def test_iphone_keyword_routes_to_world(self):
-        svc = TriageService()
-        bucket, sub = svc.categorize_with_sub(self._story("iPhone 17 announced"))
-        assert bucket == Bucket.WORLD
-        assert sub == "tech"
-
-    def test_unrecognized_routes_to_world_news(self):
-        svc = TriageService()
-        bucket, sub = svc.categorize_with_sub(self._story("Local election results"))
+        bucket, sub = svc.categorize_with_sub(_story("Space City Weather"))
         assert bucket == Bucket.WORLD
         assert sub == "news"
 
-    def test_feed_name_takes_priority_over_keyword(self):
-        # Even if title has AI keywords, a skip feed wins
+    def test_neurologica_routes_to_science(self):
         svc = TriageService()
-        assert svc.categorize(self._story("LLM beats everything", feed="ESPN")) == Bucket.SKIP
+        bucket, sub = svc.categorize_with_sub(_story("NeuroLogica Blog"))
+        assert bucket == Bucket.WORLD
+        assert sub == "science"
+
+    def test_ghostbusters_routes_to_entertainment(self):
+        svc = TriageService()
+        bucket, sub = svc.categorize_with_sub(_story("Ghostbusters News"))
+        assert bucket == Bucket.WORLD
+        assert sub == "entertainment"
+
+    def test_apple_newsroom_routes_to_tech_not_entertainment(self):
+        svc = TriageService()
+        bucket, sub = svc.categorize_with_sub(_story("Apple Newsroom"))
+        assert bucket == Bucket.WORLD
+        assert sub == "tech"
+
+
+class TestKeywordFallback:
+    def test_hacker_news_llm_keyword_routes_to_ai_ml(self):
+        svc = TriageService()
+        assert svc.categorize(_story("Hacker News", "New LLM beats GPT-4")) == Bucket.AI_ML
+
+    def test_hacker_news_no_keyword_routes_to_world(self):
+        svc = TriageService()
+        assert svc.categorize(_story("Hacker News", "Best coffee grinder Ask HN")) == Bucket.WORLD
+
+    def test_unknown_feed_defaults_to_world(self):
+        svc = TriageService()
+        assert svc.categorize(_story("Some Random Blog", "Weekend plans")) == Bucket.WORLD
+
+    def test_feed_name_takes_priority_over_keyword(self):
+        # ALWAYS_SKIP beats AI/ML keywords
+        svc = TriageService()
+        assert svc.categorize(_story("The NewsBlur Blog", "new LLM released")) == Bucket.SKIP
+
+
+class TestBoostTags:
+    def test_open_source_boost(self):
+        svc = TriageService()
+        tags = svc.get_boost_tags(_story(
+            "cs.AI updates on arXiv.org",
+            "Open-source Llama variant outperforms proprietary models",
+        ))
+        assert "boost:open-source" in tags
+
+    def test_user_curated_boost_for_gbninjaturtle(self):
+        svc = TriageService()
+        tags = svc.get_boost_tags(_story("saved by gbninjaturtle", "anything"))
+        assert "boost:user-curated" in tags
+
+    def test_rdd_long_signal(self):
+        svc = TriageService()
+        tags = svc.get_boost_tags(_story(
+            "NeuroLogica Blog",
+            "New research on consciousness and emergence",
+        ))
+        assert "long-signal:rdd" in tags
+
+    def test_non_gbninjaturtle_reddit_feed_no_user_curated(self):
+        svc = TriageService()
+        tags = svc.get_boost_tags(_story("ClaudeAI", "anything"))
+        assert "boost:user-curated" not in tags
+
 
 class TestBatchCategorize:
     def test_returns_dict_of_bucket_to_stories(self):
-        from unittest.mock import MagicMock
         svc = TriageService()
-        stories = []
-        for feed, title in [
-            ("arXiv AI", "Neural networks"),
-            ("BBC News", "Election results"),
-            ("ESPN", "Game recap"),
-        ]:
-            s = MagicMock()
-            s.story_feed_title = feed
-            s.story_title = title
-            stories.append(s)
+        stories = [
+            _story("cs.AI updates on arXiv.org"),
+            _story("BBC News"),
+            _story("The NewsBlur Blog"),
+        ]
         result = svc.batch_categorize(stories)
         assert len(result[Bucket.AI_ML]) == 1
         assert len(result[Bucket.WORLD]) == 1

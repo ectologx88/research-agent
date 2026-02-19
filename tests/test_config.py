@@ -42,7 +42,7 @@ def test_bedrock_briefing_model_id_default(monkeypatch):
     monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
     monkeypatch.delenv("BEDROCK_BRIEFING_MODEL_ID", raising=False)
     s = Settings()
-    assert s.bedrock_briefing_model_id == "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    assert s.bedrock_briefing_model_id == "us.anthropic.claude-sonnet-4-6"
 
 
 def test_aiml_collection_id_defaults_to_minus_one(monkeypatch):
@@ -77,3 +77,39 @@ def test_summarizer_model_id_has_default(monkeypatch):
     from src.config import Settings
     s = Settings()
     assert s.bedrock_summarizer_model_id != ""
+
+
+def test_new_ddb_table_defaults(monkeypatch):
+    monkeypatch.setenv("NEWSBLUR_USERNAME", "u")
+    monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
+    from src.config import Settings
+    s = Settings()
+    assert s.dynamodb_story_staging_table == "story-staging"
+    assert s.dynamodb_signal_table == "signal-tracker"
+    assert s.dynamodb_briefing_table == "briefing-archive"
+
+
+def test_dry_run_default_is_false(monkeypatch):
+    monkeypatch.setenv("NEWSBLUR_USERNAME", "u")
+    monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
+    from src.config import Settings
+    s = Settings()
+    assert s.dry_run == "false"
+
+
+def test_cost_alert_threshold_default(monkeypatch):
+    monkeypatch.setenv("NEWSBLUR_USERNAME", "u")
+    monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
+    from src.config import Settings
+    s = Settings()
+    assert s.cost_alert_daily_threshold == 3.00
+
+
+def test_pipeline_cap_defaults(monkeypatch):
+    monkeypatch.setenv("NEWSBLUR_USERNAME", "u")
+    monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
+    from src.config import Settings
+    s = Settings()
+    assert s.max_ai_ml_stories == 15
+    assert s.max_world_stories == 10
+    assert s.newsblur_hours_back == 12

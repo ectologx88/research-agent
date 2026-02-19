@@ -39,8 +39,26 @@ class Settings(BaseSettings):
     sqs_briefing_queue_url: str = ""
 
     # Briefing synthesis
-    bedrock_briefing_model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    bedrock_briefing_model_id: str = "us.anthropic.claude-sonnet-4-6"
 
     # Summarizer thresholds
     summarizer_aiml_min_score: int = 6
     summarizer_world_min_score: int = 5
+
+    # New DynamoDB tables (v2 pipeline)
+    dynamodb_story_staging_table: str = "story-staging"
+    dynamodb_signal_table: str = "signal-tracker"
+    dynamodb_briefing_table: str = "briefing-archive"
+
+    # DRY_RUN modes: "false" | "true" | "writes_only"
+    # "true"         = no LLM calls, no writes, no SQS (pure dry run)
+    # "writes_only"  = real LLM calls but no writes/SQS
+    dry_run: str = "false"
+
+    # Cost monitoring
+    cost_alert_daily_threshold: float = 3.00
+
+    # Pipeline caps (match config/scoring_weights.py constants)
+    max_ai_ml_stories: int = 15
+    max_world_stories: int = 10
+    newsblur_hours_back: int = 12

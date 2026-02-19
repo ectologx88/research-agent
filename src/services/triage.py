@@ -1,8 +1,10 @@
-"""Rule-based story triage — no LLM required."""
+# src/services/triage.py
+"""Rule-based story triage — delegates to config/feed_rules.py."""
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Any
 
-from src.models.story import Story
+from config.feed_rules import Route, get_route
+from config.keywords import get_boost_tags
 
 
 class Bucket(str, Enum):
@@ -11,95 +13,37 @@ class Bucket(str, Enum):
     SKIP = "skip"
 
 
-# Feed-name rules: lowercase substring → (bucket, sub_bucket)
-FEED_RULES: Dict[str, Tuple[Bucket, str | None]] = {
-    # AI/ML
-    "arxiv": (Bucket.AI_ML, "research"),
-    "papers with code": (Bucket.AI_ML, "research"),
-    "hugging face": (Bucket.AI_ML, "industry"),
-    "towards data science": (Bucket.AI_ML, "research"),
-    "the gradient": (Bucket.AI_ML, "research"),
-    "import ai": (Bucket.AI_ML, "research"),
-    "openai": (Bucket.AI_ML, "industry"),
-    "anthropic": (Bucket.AI_ML, "industry"),
-    "deepmind": (Bucket.AI_ML, "research"),
-    "google ai": (Bucket.AI_ML, "research"),
-    # Tech → world/tech
-    "the verge": (Bucket.WORLD, "tech"),
-    "techcrunch": (Bucket.WORLD, "tech"),
-    "ars technica": (Bucket.WORLD, "tech"),
-    "wired": (Bucket.WORLD, "tech"),
-    "9to5mac": (Bucket.WORLD, "tech"),
-    "macrumors": (Bucket.WORLD, "tech"),
-    # World/News
-    "bbc": (Bucket.WORLD, "news"),
-    "npr": (Bucket.WORLD, "news"),
-    "reuters": (Bucket.WORLD, "news"),
-    "ap news": (Bucket.WORLD, "news"),
-    "associated press": (Bucket.WORLD, "news"),
-    "new york times": (Bucket.WORLD, "news"),
-    "washington post": (Bucket.WORLD, "news"),
-    "the guardian": (Bucket.WORLD, "news"),
-    # Science
-    "science daily": (Bucket.WORLD, "science"),
-    "nature": (Bucket.WORLD, "science"),
-    "new scientist": (Bucket.WORLD, "science"),
-    "science alert": (Bucket.WORLD, "science"),
-    "live science": (Bucket.WORLD, "science"),
-    # Weather
-    "weather underground": (Bucket.WORLD, "weather"),
-    "national weather service": (Bucket.WORLD, "weather"),
-    "weather.gov": (Bucket.WORLD, "weather"),
-    # Skip
-    "espn": (Bucket.SKIP, "sports"),
-    "bleacher report": (Bucket.SKIP, "sports"),
-    "sports illustrated": (Bucket.SKIP, "sports"),
-    "buzzfeed": (Bucket.SKIP, "lifestyle"),
+_ROUTE_TO_BUCKET = {
+    Route.AI_ML: Bucket.AI_ML,
+    Route.WORLD: Bucket.WORLD,
+    Route.SKIP: Bucket.SKIP,
 }
-
-AI_ML_KEYWORDS = [
-    "llm", "gpt", "claude", "gemini", "mistral", "llama",
-    "neural network", "transformer", "diffusion model",
-    "reinforcement learning", "machine learning",
-    "artificial intelligence", "deep learning",
-    "foundation model", "fine-tun", "retrieval augmented",
-    "embedding model", "language model",
-]
-
-TECH_KEYWORDS = [
-    "iphone", "android", "google", "microsoft", "apple",
-    "startup", "open source", "github", "developer",
-    "programming", "software", "hardware", "chip",
-    "semiconductor", "product launch",
-]
 
 
 class TriageService:
-    """Categorizes stories into buckets using feed-name rules + keyword fallback."""
+    """Categorizes stories using config/feed_rules.py. No LLM required."""
 
-    def categorize(self, story) -> Bucket:
+    def categorize(self, story: Any) -> Bucket:
         bucket, _ = self.categorize_with_sub(story)
         return bucket
 
-    def categorize_with_sub(self, story) -> Tuple[Bucket, str]:
-        feed_lower = (story.story_feed_title or "").lower()
-        title_lower = (story.story_title or "").lower()
+    def categorize_with_sub(self, story: Any) -> tuple[Bucket, str]:
+        feed = story.story_feed_title or ""
+        title = story.story_title or ""
+        route, sub_bucket = get_route(feed, title)
+        return _ROUTE_TO_BUCKET[route], sub_bucket
 
-        # Step 1: feed-name lookup (substring match)
-        for pattern, (bucket, sub) in FEED_RULES.items():
-            if pattern in feed_lower:
-                return bucket, (sub or "general")
+    def get_boost_tags(self, story: Any) -> list[str]:
+        """Return boost tags based on feed membership and title keywords."""
+        feed = story.story_feed_title or ""
+        title = story.story_title or ""
+        initial = []
+        if "gbninjaturtle" in feed:
+            initial.append("boost:user-curated")
+        return get_boost_tags(title, initial)
 
-        # Step 2: keyword fallback
-        if any(kw in title_lower for kw in AI_ML_KEYWORDS):
-            return Bucket.AI_ML, "research"
-        if any(kw in title_lower for kw in TECH_KEYWORDS):
-            return Bucket.WORLD, "tech"
-
-        return Bucket.WORLD, "news"
-
-    def batch_categorize(self, stories) -> Dict[Bucket, List[Tuple]]:
-        result = {
+    def batch_categorize(self, stories: list[Any]) -> dict[Bucket, list[tuple]]:
+        result: dict[Bucket, list[tuple]] = {
             Bucket.AI_ML: [],
             Bucket.WORLD: [],
             Bucket.SKIP: [],

@@ -4,3 +4,5 @@ pydantic-settings>=2.1.0
 pyzotero
 requests>=2.31.0
 tenacity>=8.2.3
+
+feedparser>=6.0.10

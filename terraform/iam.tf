@@ -25,6 +25,7 @@ resource "aws_iam_role_policy_attachment" "logs" {
 
 # DynamoDB access
 data "aws_iam_policy_document" "dynamodb" {
+  # Legacy processing-state table (phase 1)
   statement {
     actions = [
       "dynamodb:PutItem",
@@ -33,6 +34,44 @@ data "aws_iam_policy_document" "dynamodb" {
     ]
     resources = [
       aws_dynamodb_table.processing_state.arn,
+    ]
+  }
+
+  # Lambda 1 (triage): write stories to staging, increment signal counts
+  statement {
+    actions = ["dynamodb:PutItem"]
+    resources = [
+      aws_dynamodb_table.story_staging.arn,
+    ]
+  }
+
+  statement {
+    actions = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+    resources = [
+      aws_dynamodb_table.signal_tracker.arn,
+    ]
+  }
+
+  # Lambda 2 (summarizer): read and update staging records
+  statement {
+    actions = ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:BatchGetItem"]
+    resources = [
+      aws_dynamodb_table.story_staging.arn,
+    ]
+  }
+
+  # Lambda 3 (briefing): read signals, read/write briefing archive
+  statement {
+    actions = ["dynamodb:GetItem", "dynamodb:Query"]
+    resources = [
+      aws_dynamodb_table.signal_tracker.arn,
+    ]
+  }
+
+  statement {
+    actions = ["dynamodb:PutItem", "dynamodb:GetItem"]
+    resources = [
+      aws_dynamodb_table.briefing_archive.arn,
     ]
   }
 }
