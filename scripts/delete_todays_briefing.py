@@ -29,6 +29,7 @@ for item in items:
             f"https://api.raindrop.io/rest/v1/raindrop/{rid}",
             headers=headers,
         )
+        del_resp.raise_for_status()
         print(f"Deleted: {title} (id={rid}, status={del_resp.status_code})")
         deleted += 1
 
