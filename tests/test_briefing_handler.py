@@ -66,14 +66,18 @@ def test_briefing_date_to_iso_pm():
     assert handler_mod._briefing_date_to_iso("2026-02-17-PM") == "2026-02-17T18:00:00Z"
 
 
-def test_extract_summary_skips_headings():
+def test_extract_description_skips_headings():
     text = "# Heading\n\nThis is the summary paragraph."
-    assert handler_mod._extract_summary(text) == "This is the summary paragraph."
+    desc, body = handler_mod._extract_description(text)
+    assert desc == "This is the summary paragraph."
+    assert body == text  # no sentinel found, body unchanged
 
 
-def test_extract_summary_returns_first_non_blank_line():
+def test_extract_description_returns_first_non_blank_line():
     text = "\n\nFirst real line."
-    assert handler_mod._extract_summary(text) == "First real line."
+    desc, body = handler_mod._extract_description(text)
+    assert desc == "First real line."
+    assert body == text  # no sentinel found, body unchanged
 
 
 def test_build_items_filters_stories_missing_url_or_summary():
@@ -225,3 +229,109 @@ def test_dry_run_true_no_writes(
     mock_post_to_site.assert_not_called()
     # Archive not written in dry_run
     mock_archive_cls.return_value.store_briefing.assert_not_called()
+
+
+def test_extract_description_returns_sentinel_line():
+    """DESCRIPTION: sentinel line is extracted as description, sentinel removed from body."""
+    text = "DESCRIPTION: The field moved fast today.\n\n# ⚖️ The AI Abstract\n\nBody here."
+    desc, body = handler_mod._extract_description(text)
+    assert desc == "The field moved fast today."
+    assert "DESCRIPTION:" not in body
+    assert "# ⚖️ The AI Abstract" in body
+
+
+def test_extract_description_falls_back_to_first_non_heading_line():
+    """If no DESCRIPTION: sentinel, falls back to first non-empty non-heading line."""
+    text = "# Heading\n\nFallback summary sentence."
+    desc, body = handler_mod._extract_description(text)
+    assert desc == "Fallback summary sentence."
+    assert body == text  # body unchanged when no sentinel found
+
+
+def test_post_to_site_uses_clean_body():
+    """_post_to_site sends description and body WITHOUT the DESCRIPTION: sentinel line."""
+    import json as _json
+    from unittest.mock import MagicMock, patch
+
+    settings = MagicMock()
+    settings.site_url = "https://example.com"
+    settings.brief_api_key = "key"
+
+    raw_body = "DESCRIPTION: Clean sentence.\n\n# ⚖️ The AI Abstract\n\nBody here."
+    # We call _post_to_site with the raw body (before sentinel strip) — caller strips it
+    # Actually, caller strips it and passes clean body + description separately
+    clean_body = "# ⚖️ The AI Abstract\n\nBody here."
+    description = "Clean sentence."
+    captured = {}
+
+    def fake_urlopen(req, *args, **kwargs):
+        captured["payload"] = _json.loads(req.data)
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.status = 201
+        return mock_resp
+
+    with patch("urllib.request.urlopen", fake_urlopen):
+        handler_mod._post_to_site(
+            settings, "2026-02-19-AM", [],
+            clean_body,
+            category="AI/ML",
+            title="The AI Abstract — Morning Edition",
+            description=description,
+        )
+
+    assert captured["payload"]["summary"] == "Clean sentence."
+    assert "DESCRIPTION:" not in captured["payload"]["body"]
+    assert "# ⚖️ The AI Abstract" in captured["payload"]["body"]
+
+
+def test_aiml_title_morning_edition():
+    """AM AI_ML briefings get title 'The AI Abstract — Morning Edition'."""
+    from unittest.mock import patch
+
+    with patch("src.handlers.briefing_handler.Settings") as mock_settings_cls, \
+         patch("src.handlers.briefing_handler.boto3"), \
+         patch("src.handlers.briefing_handler._post_to_site") as mock_post, \
+         patch("src.handlers.briefing_handler.BriefingSynthesizer") as mock_synth_cls, \
+         patch("src.handlers.briefing_handler.SignalTracker"), \
+         patch("src.handlers.briefing_handler.BriefingArchive"):
+
+        mock_settings_cls.return_value = _default_settings()
+        mock_synth_cls.return_value.synthesize.return_value = (
+            "DESCRIPTION: AI moved fast.\n\n# ⚖️ The AI Abstract\n\nBody."
+        )
+        mock_synth_cls.return_value._prior_briefing_key.return_value = ("2026-02-18", "AI_ML")
+        mock_synth_cls.return_value._prior_briefing_key.return_value = ("2026-02-18-PM", "AI_ML")
+
+        event = _sqs_event(briefing_type="AI_ML", briefing_date="2026-02-19-AM",
+                           stories=[_make_story()])
+        handler_mod.lambda_handler(event, {})
+
+    _, kwargs = mock_post.call_args
+    assert kwargs["title"] == "The AI Abstract — Morning Edition"
+
+
+def test_aiml_title_evening_edition():
+    """PM AI_ML briefings get title 'The AI Abstract — Evening Edition'."""
+    from unittest.mock import patch
+
+    with patch("src.handlers.briefing_handler.Settings") as mock_settings_cls, \
+         patch("src.handlers.briefing_handler.boto3"), \
+         patch("src.handlers.briefing_handler._post_to_site") as mock_post, \
+         patch("src.handlers.briefing_handler.BriefingSynthesizer") as mock_synth_cls, \
+         patch("src.handlers.briefing_handler.SignalTracker"), \
+         patch("src.handlers.briefing_handler.BriefingArchive"):
+
+        mock_settings_cls.return_value = _default_settings()
+        mock_synth_cls.return_value.synthesize.return_value = (
+            "DESCRIPTION: Evening summary.\n\n# Body."
+        )
+        mock_synth_cls.return_value._prior_briefing_key.return_value = ("2026-02-18-PM", "AI_ML")
+
+        event = _sqs_event(briefing_type="AI_ML", briefing_date="2026-02-19-PM",
+                           stories=[_make_story()])
+        handler_mod.lambda_handler(event, {})
+
+    _, kwargs = mock_post.call_args
+    assert kwargs["title"] == "The AI Abstract — Evening Edition"

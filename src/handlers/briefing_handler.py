@@ -21,13 +21,27 @@ def _briefing_date_to_iso(briefing_date: str) -> str:
     return f"{run_date}T{hour}:00:00Z"
 
 
-def _extract_summary(briefing_text: str) -> str:
-    """Return the first non-empty, non-heading line of the briefing."""
-    for line in briefing_text.splitlines():
+def _extract_description(briefing_text: str) -> tuple[str, str]:
+    """Extract DESCRIPTION: sentinel line as the clean summary.
+
+    Returns (description, clean_body) where clean_body has the sentinel line removed.
+    Falls back to first non-heading line if no sentinel found (e.g. WORLD briefings).
+    """
+    lines = briefing_text.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("DESCRIPTION:"):
+            description = line[len("DESCRIPTION:"):].strip()
+            remaining = lines[i + 1:]
+            if remaining and remaining[0].strip() == "":
+                remaining = remaining[1:]
+            clean_body = "\n".join(remaining)
+            return description, clean_body
+    # Fallback: no sentinel found — grab first non-empty non-heading line
+    for line in lines:
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):
-            return stripped
-    return briefing_text[:500]
+            return stripped, briefing_text
+    return briefing_text[:500], briefing_text
 
 
 def _source_from_url(url: str) -> str:
@@ -56,7 +70,8 @@ def _build_items(stories: list) -> list:
 
 
 def _post_to_site(settings: Settings, briefing_date: str, stories: list,
-                  briefing_text: str, *, category: str, title: str) -> None:
+                  briefing_text: str, *, category: str, title: str,
+                  description: str) -> None:
     """POST briefing to the website ingest endpoint.
 
     Treats 200/201 as success and 409 as idempotent success (already ingested).
@@ -66,7 +81,7 @@ def _post_to_site(settings: Settings, briefing_date: str, stories: list,
         "title": title,
         "date": _briefing_date_to_iso(briefing_date),
         "category": category,
-        "summary": _extract_summary(briefing_text),
+        "summary": description,
         "body": briefing_text,
         "items": _build_items(stories),
     }).encode()
@@ -157,16 +172,21 @@ def lambda_handler(event, context):
     raindrop_id = None
     if do_writes:
         if briefing_type == "AI_ML":
-            # Post to website ingest endpoint; raises on non-200/201/409 → DLQ retry
-            _post_to_site(settings, briefing_date, stories, briefing_text,
-                          category="AI/ML", title=f"AI Abstract — {briefing_date}")
+            edition = "Morning Edition" if time_of_day == "AM" else "Evening Edition"
+            description, clean_body = _extract_description(briefing_text)
+            _post_to_site(settings, briefing_date, stories, clean_body,
+                          category="AI/ML",
+                          title=f"The AI Abstract — {edition}",
+                          description=description)
             published = True
         else:  # WORLD — post to private site page + update Raindrop bookmark
             # Site post is non-fatal for WORLD; Raindrop is the primary delivery
+            description, clean_body = _extract_description(briefing_text)
             try:
-                _post_to_site(settings, briefing_date, stories, briefing_text,
+                _post_to_site(settings, briefing_date, stories, clean_body,
                               category="World",
-                              title=f"The Recursive Briefing — {briefing_date}")
+                              title=f"The Recursive Briefing — {briefing_date}",
+                              description=description)
             except RuntimeError as exc:
                 log("WARNING", "briefing.world_site_ingest_failed", error=str(exc))
             if settings.raindrop_token:
