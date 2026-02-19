@@ -102,12 +102,13 @@ def test_passes_stories_sent_to_briefing_queue(
 @patch("src.handlers.summarizer_handler.StoryStaging")
 @patch("src.handlers.summarizer_handler.boto3")
 @patch("src.handlers.summarizer_handler.Settings")
-def test_fewer_than_3_pass_does_not_send_sqs(
+def test_fewer_than_3_pass_sends_thin_briefing(
     mock_settings_cls, mock_boto3, mock_staging_cls, mock_scorer_cls,
     mock_raindrop_cls, mock_nb_cls,
 ):
+    """Fewer than 3 passing stories should still produce a briefing (thin_briefing path)."""
     mock_settings_cls.return_value = _default_settings()
-    # 5 stories, only h0 and h2 pass (2 total < MIN_STORIES_FOR_BRIEFING=3)
+    # 5 stories, only h0 and h2 pass (2 total — thin briefing)
     items = [_make_item(f"h{i}") for i in range(5)]
     mock_staging_cls.return_value.batch_get_stories.return_value = items
 
@@ -119,8 +120,8 @@ def test_fewer_than_3_pass_does_not_send_sqs(
     resp = handler_mod.lambda_handler(_sqs_event(hashes=[f"h{i}" for i in range(5)]), {})
 
     assert resp["body"]["passed"] == 2
-    assert resp["body"]["sent_to_briefing"] == 0
-    mock_boto3.client.return_value.send_message.assert_not_called()
+    assert resp["body"]["sent_to_briefing"] == 2  # always send if any pass
+    mock_boto3.client.return_value.send_message.assert_called_once()
 
 
 @patch("src.handlers.summarizer_handler.NewsBlurClient")

@@ -149,9 +149,14 @@ def lambda_handler(event, context):
         except Exception as exc:
             log("WARNING", "summarizer.newsblur_mark_failed", error=str(exc))
 
-    # Send to briefing queue if enough stories passed
+    # Send to briefing queue — always brief if at least one story passed.
+    # Log thin_briefing warning when below preferred minimum so it's visible in metrics.
     sent = 0
-    if len(passed_stories) >= MIN_STORIES_FOR_BRIEFING and do_writes:
+    PREFERRED_MIN = 3
+    if len(passed_stories) > 0 and do_writes:
+        if 0 < len(passed_stories) < PREFERRED_MIN:
+            log("WARNING", "summarizer.thin_briefing",
+                passed=len(passed_stories), preferred_min=PREFERRED_MIN)
         if settings.sqs_briefing_queue_url:
             sqs.send_message(
                 QueueUrl=settings.sqs_briefing_queue_url,
@@ -166,10 +171,8 @@ def lambda_handler(event, context):
         else:
             log("WARNING", "summarizer.no_sqs_url_configured",
                 passed=len(passed_stories), briefing_type=briefing_type)
-    else:
-        if len(passed_stories) < MIN_STORIES_FOR_BRIEFING:
-            log("INFO", "summarizer.bail_threshold",
-                passed=len(passed_stories), threshold=MIN_STORIES_FOR_BRIEFING)
+    elif len(passed_stories) == 0:
+        log("INFO", "summarizer.bail_no_stories", briefing_type=briefing_type)
 
     body = {
         "briefing_type": briefing_type,
