@@ -5,6 +5,14 @@ from unittest.mock import MagicMock, patch
 import src.handlers.briefing_handler as handler_mod
 
 
+
+def test_equalizer_system_has_description_sentinel():
+    """EQUALIZER prompt must instruct the model to output DESCRIPTION: sentinel."""
+    from src.services.personas import _EQUALIZER_SYSTEM
+    assert "DESCRIPTION:" in _EQUALIZER_SYSTEM
+    assert "Making the Future Evenly Distributed" not in _EQUALIZER_SYSTEM
+
+
 def _sqs_event(briefing_type="AI_ML", stories=None, briefing_date="2026-02-17-AM"):
     body = json.dumps({
         "briefing_type": briefing_type,
