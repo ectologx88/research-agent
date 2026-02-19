@@ -53,6 +53,7 @@ data "aws_ssm_parameter" "site_url" {
 }
 
 data "aws_ssm_parameter" "brief_api_key" {
+  # Value must match BRIEF_API_KEY set in AWS Amplify Environment Variables for the website
   name            = "/prod/ResearchAgent/Brief_Api_Key"
   with_decryption = true
 }
