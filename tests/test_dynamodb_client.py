@@ -64,14 +64,23 @@ class TestStoryStaging:
 
     def test_batch_get_stories_skips_missing(self):
         client, table = self._client()
-        def get_item_side_effect(Key):
-            if Key["story_hash"] == "found":
-                return {"Item": {"story_hash": "found"}}
-            return {}
-        table.get_item.side_effect = get_item_side_effect
+        # Mock the table name and client for batch_get_item
+        table.name = "test-table"
+        mock_client = MagicMock()
+        table.meta.client = mock_client
+        
+        # Mock batch_get_item response
+        mock_client.batch_get_item.return_value = {
+            "Responses": {
+                "test-table": [{"story_hash": "found"}]
+            },
+            "UnprocessedKeys": {}
+        }
+        
         result = client.batch_get_stories(["found", "missing"], "AI_ML")
         assert len(result) == 1
         assert result[0]["story_hash"] == "found"
+        mock_client.batch_get_item.assert_called_once()
 
     def test_update_status_expression_content(self):
         client, table = self._client()

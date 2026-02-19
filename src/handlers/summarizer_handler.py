@@ -58,14 +58,14 @@ def lambda_handler(event, context):
 
     stories_data = story_staging.batch_get_stories(story_hashes, briefing_type)
     passed_stories = []
-    rejected_hashes = []
 
-    def _score_story(item: dict) -> dict | None:
+    def _score_story(item: dict) -> tuple[dict | None, str | None]:
+        """Score a story. Returns (story_result, rejected_hash)."""
         story_hash = item["story_hash"]
         if item.get("status") != "pending":
             log("INFO", "summarizer.skip_idempotent",
                 story_hash=story_hash, status=item.get("status"))
-            return None
+            return (None, None)
 
         boost_tags = item.get("boost_tags") or []
         try:
@@ -79,7 +79,7 @@ def lambda_handler(event, context):
             )
         except Exception as exc:
             log("WARNING", "summarizer.score_failed", story_hash=story_hash, error=str(exc))
-            return None
+            return (None, None)
 
         if do_writes:
             story_staging.update_status(
@@ -92,8 +92,7 @@ def lambda_handler(event, context):
             )
 
         if not result.passed:
-            rejected_hashes.append(story_hash)
-            return None
+            return (None, story_hash)
 
         if raindrop and item.get("raindrop_id"):
             with raindrop_sem:
@@ -106,7 +105,7 @@ def lambda_handler(event, context):
                     log("WARNING", "summarizer.raindrop_update_failed",
                         story_hash=story_hash, error=str(exc))
 
-        return {
+        return ({
             "story_hash": story_hash,
             "title": item["title"],
             "url": item.get("url", ""),
@@ -126,14 +125,17 @@ def lambda_handler(event, context):
                 "total": result.total,
             },
             "raindrop_id": item.get("raindrop_id"),
-        }
+        }, None)
 
+    rejected_hashes = []
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(_score_story, item): item for item in stories_data}
         for future in as_completed(futures):
-            story_result = future.result()
+            story_result, rejected_hash = future.result()
             if story_result is not None:
                 passed_stories.append(story_result)
+            if rejected_hash is not None:
+                rejected_hashes.append(rejected_hash)
 
     log("INFO", "summarizer.scoring_complete",
         scored=len(stories_data), passed=len(passed_stories))
