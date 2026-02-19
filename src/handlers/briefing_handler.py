@@ -4,6 +4,7 @@ import urllib.error
 import urllib.request
 
 import boto3
+from botocore.config import Config
 
 from shared.dynamodb_client import BriefingArchive, SignalTracker
 from shared.logger import log
@@ -115,8 +116,11 @@ def lambda_handler(event, context):
     # Set up synthesizer
     use_real_llm = dry_run_mode != "true"
     synth = BriefingSynthesizer(
-        bedrock_client=boto3.client("bedrock-runtime", region_name=settings.bedrock_region)
-        if use_real_llm else None,
+        bedrock_client=boto3.client(
+            "bedrock-runtime",
+            region_name=settings.bedrock_region,
+            config=Config(read_timeout=580),  # just under Lambda's 600s timeout
+        ) if use_real_llm else None,
         model_id=settings.bedrock_briefing_model_id,
         dry_run=not use_real_llm,
     )
