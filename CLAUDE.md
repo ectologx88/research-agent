@@ -10,7 +10,8 @@ via EventBridge.
   Published to Raindrop "AI/ML Feed" collection (public RSS) AND posted to the website.
 - **The Recursive Briefing** — Private, world/culture/science dispatch.
   Narrative format, grounded in Pasadena TX weather and local news.
-  Published to Raindrop "World Digest" collection (private). NEVER goes to website.
+  Posted to website as a private owner-only page (`/briefs/<date>-pm-world?t=OWNER_ACCESS_TOKEN`)
+  AND updates the fixed Raindrop bookmark in-place (private, note field). Site post is non-fatal.
 
 ## Architecture
 Three Lambdas connected by SQS:
@@ -27,7 +28,7 @@ Lambda 1 (Triage, no LLM) → Lambda 2 (Haiku editorial filter) → Lambda 3 (So
 - `DRY_RUN=true` for zero-cost testing | `DRY_RUN=writes_only` for real LLM, no writes
 - Raindrop rate limit: `threading.Semaphore(5)` in Lambda 2, 200ms sleep in Lambda 1
 - Lambda 2 bails if fewer than 3 stories pass threshold — no briefing-queue message
-- Recursive Briefing NEVER publishes to the website
+- Recursive Briefing posts to website as private page (category="World", token-gated) + Raindrop
 - `ContextLoader.format_context_block()` must be called (not `json.dumps()`) — the Zeitgeist
   persona expects `[SYSTEM_CONTEXT_BLOCK]` marker format, not raw JSON
 
@@ -44,15 +45,10 @@ Lambda 1 (Triage, no LLM) → Lambda 2 (Haiku editorial filter) → Lambda 3 (So
 - Key stored in SSM: `/prod/ResearchAgent/Brief_Api_Key` (us-east-1)
 - Terraform reads SSM → sets `BRIEF_API_KEY` env var on the briefing Lambda
 
-### Known issue: HTTP 200 not accepted
-`_post_to_site` in `briefing_handler.py` raises `RuntimeError` on HTTP 200.
-The site returns 200 for same-content idempotent re-ingest. Add 200 to accepted codes:
-```python
-if status in (200, 201):
-    log("INFO", "briefing.site_ingest_ok", briefing_date=briefing_date)
-elif status == 409:
-    log("INFO", "briefing.site_ingest_duplicate", briefing_date=briefing_date)
-```
+### `_post_to_site` status handling
+Accepts 200 (idempotent re-ingest) and 201 (created) as success; 409 logged as duplicate.
+Source field: `feed_name` is always empty from NewsBlur river endpoint, so
+`_build_items` falls back to the URL hostname (e.g. `axios.com`) via `_source_from_url`.
 
 ## Key Files
 - `config/feed_rules.py` — routing logic (44 real NewsBlur feeds); add company

@@ -56,16 +56,16 @@ def _build_items(stories: list) -> list:
 
 
 def _post_to_site(settings: Settings, briefing_date: str, stories: list,
-                  briefing_text: str) -> None:
+                  briefing_text: str, *, category: str, title: str) -> None:
     """POST briefing to the website ingest endpoint.
 
-    Treats 201 as success and 409 as idempotent success (already ingested).
+    Treats 200/201 as success and 409 as idempotent success (already ingested).
     Raises RuntimeError on any other status so the Lambda retries via DLQ.
     """
     payload = json.dumps({
-        "title": f"AI Abstract — {briefing_date}",
+        "title": title,
         "date": _briefing_date_to_iso(briefing_date),
-        "category": "AI/ML",
+        "category": category,
         "summary": _extract_summary(briefing_text),
         "body": briefing_text,
         "items": _build_items(stories),
@@ -157,10 +157,18 @@ def lambda_handler(event, context):
     raindrop_id = None
     if do_writes:
         if briefing_type == "AI_ML":
-            # Post to website ingest endpoint; raises on non-201/409 → DLQ retry
-            _post_to_site(settings, briefing_date, stories, briefing_text)
+            # Post to website ingest endpoint; raises on non-200/201/409 → DLQ retry
+            _post_to_site(settings, briefing_date, stories, briefing_text,
+                          category="AI/ML", title=f"AI Abstract — {briefing_date}")
             published = True
-        else:  # WORLD — update the single fixed Raindrop bookmark in-place
+        else:  # WORLD — post to private site page + update Raindrop bookmark
+            # Site post is non-fatal for WORLD; Raindrop is the primary delivery
+            try:
+                _post_to_site(settings, briefing_date, stories, briefing_text,
+                              category="World",
+                              title=f"The Recursive Briefing — {briefing_date}")
+            except RuntimeError as exc:
+                log("WARNING", "briefing.world_site_ingest_failed", error=str(exc))
             if settings.raindrop_token:
                 raindrop = RaindropClient(
                     token=settings.raindrop_token,
