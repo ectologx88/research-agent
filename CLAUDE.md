@@ -5,8 +5,9 @@ A dual-stream AI-powered briefing system for Seth. Runs twice daily (11:00/23:00
 via EventBridge.
 
 ## The Two Publications
-- **The AI Abstract** — Public, industrial AI intelligence brief.
-  Three-level structure: Frontier → Enterprise → Democratization.
+- **The AI Abstract** — Public intelligence brief for technically literate readers across
+  industries (practitioners, researchers, founders, informed observers). NOT personalized
+  for any individual or company. Three-level structure: Frontier → Enterprise → Equalizer Angle.
   Published to Raindrop "AI/ML Feed" collection (public RSS) AND posted to the website.
 - **The Recursive Briefing** — Private, world/culture/science dispatch.
   Narrative format, grounded in Pasadena TX weather and local news.
