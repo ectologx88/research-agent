@@ -30,6 +30,8 @@ pip install \
 
 # 3. Copy source
 cp -r "$PROJECT_ROOT/src" "$DIST_DIR/package/src"
+cp -r "$PROJECT_ROOT/config" "$DIST_DIR/package/config"
+cp -r "$PROJECT_ROOT/shared" "$DIST_DIR/package/shared"
 
 # 4. Zip
 cd "$DIST_DIR/package"
