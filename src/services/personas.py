@@ -6,6 +6,17 @@ Two distinct editorial identities:
 - Zeitgeist (Recursive Briefing): seasoned foreign correspondent
 """
 import json
+from decimal import Decimal
+
+
+def _dumps(obj) -> str:
+    """json.dumps with Decimal → int/float coercion for DynamoDB data."""
+    def _default(o):
+        if isinstance(o, Decimal):
+            return int(o) if o == o.to_integral_value() else float(o)
+        raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+    return json.dumps(obj, indent=2, default=_default)
+
 
 SOURCE_EMOJI: dict[str, str] = {
     "peer-reviewed": "🔬",
@@ -116,11 +127,11 @@ def build_equalizer_prompt(
     parts = [_EQUALIZER_SYSTEM]
 
     parts.append("\n\n---\n## STORY PAYLOAD\n")
-    parts.append(json.dumps(stories, indent=2))
+    parts.append(_dumps(stories))
 
     if signals:
         parts.append("\n\n## WEAK SIGNALS (from signal_tracker — use exactly this data)\n")
-        parts.append(json.dumps(signals, indent=2))
+        parts.append(_dumps(signals))
 
     if prior_briefing:
         parts.append("\n\n## PRIOR EDITION (for trend continuity)\n")
@@ -144,11 +155,11 @@ def build_zeitgeist_prompt(
         parts.append(context_block)
 
     parts.append("\n\n---\n## STORY PAYLOAD\n")
-    parts.append(json.dumps(stories, indent=2))
+    parts.append(_dumps(stories))
 
     if signals:
         parts.append("\n\n## WEAK SIGNALS\n")
-        parts.append(json.dumps(signals, indent=2))
+        parts.append(_dumps(signals))
 
     if prior_briefing:
         parts.append("\n\n## PRIOR EDITION (for trend continuity)\n")
