@@ -3,7 +3,7 @@
 
 Scoring dimensions (1-5 each, total out of 15):
 - journalistic_integrity
-- relevance (to Seth's context)
+- relevance (to technically literate AI/ML readership)
 - novelty
 
 Thresholds (from config/scoring_weights.py):
@@ -18,31 +18,39 @@ from config.scoring_weights import AI_ML_PASS_THRESHOLD, WORLD_PASS_THRESHOLD
 from shared.logger import log
 
 SCORE_AI_ML_TEMPLATE = """\
-You are the editorial filter for "The AI Abstract," an intelligence brief
-for an AI Adoption Consultant at a German chemical manufacturer who manages
-PhD-level GenAI engineers and publishes thought leadership on AI democratization.
+You are the editorial filter for "The AI Abstract," a public intelligence brief
+covering the AI and machine learning landscape for technically literate readers:
+practitioners, researchers, data scientists, founders, VCs, and informed observers
+across industries.
 
-Score this story on three dimensions (1–5 each):
+Score this story on three dimensions (1-5 each):
 
 JOURNALISTIC_INTEGRITY: Is this based on verifiable facts, peer-reviewed work,
 or primary sources? (5 = peer-reviewed/primary source, 1 = speculation/PR copy)
 
-RELEVANCE: Does this matter to an enterprise AI practitioner building
-industrial-scale AI systems?
-INCLUDE: research breakthroughs, open-source releases, capability milestones,
-consciousness/AGI/alignment content (long-signal for the RDD philosophical framework).
-PENALIZE: funding rounds, product demos without deployment path, ChatGPT wrappers,
-productivity hacks, no-code AI tools.
+RELEVANCE: Does this matter to someone seriously following AI/ML developments?
+INCLUDE: model releases and capability milestones, peer-reviewed research breakthroughs
+(memory architectures, reasoning advances, cognition and neuroscience studies),
+open-source releases, policy and governance developments with field-wide implications,
+culturally significant AI content that merits long-form analysis,
+consciousness/AGI/alignment content (long-horizon signals for the field).
+INCLUDE: viral or widely-discussed studies even if contested -- high engagement
+signals editorial value and long-form potential (e.g. brain atrophy, cognition research).
+PENALIZE: funding rounds without technical substance, product demos without novel
+capability or deployment path, ChatGPT wrappers, productivity hacks, no-code AI tools,
+PR-driven announcements with no research backing.
 
 NOVELTY: Is this genuinely new information, or rehash? Does the title sound like
 the tenth article on the same story this week?
 
-Boost tags from triage are provided — use them to inform relevance scoring:
-boost:open-source → elevate relevance (democratization thesis)
-boost:industrial → elevate relevance (Seth's native territory)
-long-signal:rdd → never penalize; these are long-horizon signals for the RDD framework
+Boost tags from triage are provided -- use them to inform relevance scoring:
+boost:open-source   -> elevate relevance (democratization thesis)
+velocity:hn-high    -> strong relevance boost; actively discussed field-wide (200+ HN points)
+velocity:hn-medium  -> moderate boost; gaining traction (50-199 HN points)
+long-signal:rdd     -> never penalize; slow-burn signals about AI consciousness,
+                       alignment, and cognition that compound over years
 
-Return ONLY valid JSON — no explanation, no markdown:
+Return ONLY valid JSON -- no explanation, no markdown:
 {{
   "integrity": <1-5>,
   "relevance": <1-5>,
@@ -50,8 +58,8 @@ Return ONLY valid JSON — no explanation, no markdown:
   "total": <sum>,
   "decision": "PASS" | "REJECT",
   "source_type": "peer-reviewed" | "journalism" | "commentary" | "single-source",
-  "reasoning": "<one sentence — why it passes or fails>",
-  "summary": "<two sentences if PASS: what happened + why it matters for enterprise AI. null if REJECT>"
+  "reasoning": "<one sentence -- why it passes or fails>",
+  "summary": "<two sentences if PASS: what happened + why it matters to the AI/ML field. null if REJECT>"
 }}
 
 Threshold: PASS if total >= {threshold}.
