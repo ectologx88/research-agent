@@ -42,6 +42,21 @@ data "aws_ssm_parameter" "raindrop_world_collection_id" {
   with_decryption = false
 }
 
+data "aws_ssm_parameter" "raindrop_personal_brief_id" {
+  name            = "/prod/ResearchAgent/Raindrop_Personal_Brief_Id"
+  with_decryption = false
+}
+
+data "aws_ssm_parameter" "site_url" {
+  name            = "/prod/ResearchAgent/Site_Url"
+  with_decryption = false
+}
+
+data "aws_ssm_parameter" "brief_api_key" {
+  name            = "/prod/ResearchAgent/Brief_Api_Key"
+  with_decryption = true
+}
+
 resource "aws_lambda_function" "triage" {
   function_name = "research-agent-triage"
   role          = aws_iam_role.lambda.arn
@@ -145,8 +160,9 @@ resource "aws_lambda_function" "briefing" {
   environment {
     variables = {
       RAINDROP_TOKEN               = data.aws_ssm_parameter.raindrop_token.value
-      RAINDROP_AIML_COLLECTION_ID  = data.aws_ssm_parameter.raindrop_aiml_collection_id.value
-      RAINDROP_WORLD_COLLECTION_ID = data.aws_ssm_parameter.raindrop_world_collection_id.value
+      RAINDROP_PERSONAL_BRIEF_ID   = data.aws_ssm_parameter.raindrop_personal_brief_id.value
+      SITE_URL                     = data.aws_ssm_parameter.site_url.value
+      BRIEF_API_KEY                = data.aws_ssm_parameter.brief_api_key.value
       DYNAMODB_REGION              = "us-east-1"
       DYNAMODB_SIGNAL_TABLE        = aws_dynamodb_table.signal_tracker.name
       DYNAMODB_BRIEFING_TABLE      = aws_dynamodb_table.briefing_archive.name

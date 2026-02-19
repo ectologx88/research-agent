@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     raindrop_aiml_collection_id: int = -1
     raindrop_world_collection_id: int = -1
     raindrop_briefing_collection_id: int = -1
+    raindrop_personal_brief_id: int = -1
+
+    # Website integration (AI_ML briefings → site ingest endpoint)
+    site_url: str = ""
+    brief_api_key: str = ""
 
     # SQS queues
     sqs_aiml_queue_url: str = ""

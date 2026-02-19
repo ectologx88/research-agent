@@ -1,13 +1,84 @@
-"""Lambda 3: Synthesize narrative briefing and post to Raindrop."""
+"""Lambda 3: Synthesize narrative briefing and publish."""
 import json
+import urllib.error
+import urllib.request
 
 import boto3
 
 from shared.dynamodb_client import BriefingArchive, SignalTracker
 from shared.logger import log
-from src.clients.raindrop import RaindropClient, RaindropAuthError
+from src.clients.raindrop import RaindropAuthError, RaindropClient
 from src.config import Settings
 from src.services.synthesizer import BriefingSynthesizer
+
+
+def _briefing_date_to_iso(briefing_date: str) -> str:
+    """Convert "2026-02-17-AM" → "2026-02-17T06:00:00Z", "-PM" → "T18:00:00Z"."""
+    run_date, time_of_day = briefing_date.rsplit("-", 1)
+    hour = "06" if time_of_day == "AM" else "18"
+    return f"{run_date}T{hour}:00:00Z"
+
+
+def _extract_summary(briefing_text: str) -> str:
+    """Return the first non-empty, non-heading line of the briefing."""
+    for line in briefing_text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped
+    return briefing_text[:500]
+
+
+def _build_items(stories: list) -> list:
+    """Map story dicts to BriefItem dicts for the ingest payload."""
+    return [
+        {
+            "title": s["title"],
+            "url": s["url"],
+            "source": s.get("feed_name", ""),
+            "snippet": s.get("summary", ""),
+        }
+        for s in stories
+        if s.get("url") and s.get("summary")
+    ]
+
+
+def _post_to_site(settings: Settings, briefing_date: str, stories: list,
+                  briefing_text: str) -> None:
+    """POST briefing to the website ingest endpoint.
+
+    Treats 201 as success and 409 as idempotent success (already ingested).
+    Raises RuntimeError on any other status so the Lambda retries via DLQ.
+    """
+    payload = json.dumps({
+        "title": f"AI Abstract — {briefing_date}",
+        "date": _briefing_date_to_iso(briefing_date),
+        "category": "AI/ML",
+        "summary": _extract_summary(briefing_text),
+        "body": briefing_text,
+        "items": _build_items(stories),
+    }).encode()
+
+    req = urllib.request.Request(
+        url=f"{settings.site_url}/api/briefs/ingest",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.brief_api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            status = resp.status
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+
+    if status == 201:
+        log("INFO", "briefing.site_ingest_created", briefing_date=briefing_date)
+    elif status == 409:
+        log("INFO", "briefing.site_ingest_duplicate", briefing_date=briefing_date)
+    else:
+        raise RuntimeError(f"Site ingest returned unexpected status {status}")
 
 
 def lambda_handler(event, context):
@@ -27,22 +98,6 @@ def lambda_handler(event, context):
 
     log("INFO", "briefing.start",
         briefing_type=briefing_type, briefing_date=briefing_date, story_count=len(stories))
-
-    # Duplicate check first — bail out before any expensive work
-    collection_id = (
-        settings.raindrop_aiml_collection_id if briefing_type == "AI_ML"
-        else settings.raindrop_world_collection_id
-    )
-    briefing_url = f"https://newsblur.com/briefing/{briefing_date}-{briefing_type}"
-
-    # Duplicate guard is Raindrop-based: only active when Raindrop is configured.
-    # When raindrop_token is unset, no dedup check is possible — proceed without it.
-    raindrop = None
-    if do_writes and settings.raindrop_token:
-        raindrop = RaindropClient(token=settings.raindrop_token, collection_id=collection_id)
-        if raindrop.check_duplicate(briefing_url):
-            log("INFO", "briefing.duplicate", url=briefing_url)
-            return {"statusCode": 200, "body": {"briefing_sent": 0, "reason": "duplicate"}}
 
     dynamodb = boto3.resource("dynamodb", region_name=settings.dynamodb_region)
     signal_tracker = SignalTracker(dynamodb.Table(settings.dynamodb_signal_table))
@@ -81,25 +136,32 @@ def lambda_handler(event, context):
         prior_briefing=prior_briefing,
     )
 
-    # Post to Raindrop
+    # Publish
+    published = False
     raindrop_id = None
-    if raindrop:
-        type_label = "AI Abstract" if briefing_type == "AI_ML" else "Recursive Briefing"
-        briefing_title = f"{type_label} — {briefing_date}"
-        tags = ["briefing", "ai-generated", time_of_day.lower(), briefing_type.lower()]
-        try:
-            result = raindrop.create_bookmark(
-                url=briefing_url,
-                title=briefing_title,
-                tags=tags,
-                note=briefing_text,
-            )
-            raindrop_id = result.get("_id") if result else None
-            log("INFO", "briefing.raindrop_created",
-                title=briefing_title, raindrop_id=raindrop_id)
-        except RaindropAuthError as exc:
-            log("ERROR", "briefing.raindrop_auth_failed", error=str(exc))
-            return {"statusCode": 500, "body": {"briefing_sent": 0, "error": str(exc)}}
+    if do_writes:
+        if briefing_type == "AI_ML":
+            # Post to website ingest endpoint; raises on non-201/409 → DLQ retry
+            _post_to_site(settings, briefing_date, stories, briefing_text)
+            published = True
+        else:  # WORLD — update the single fixed Raindrop bookmark in-place
+            if settings.raindrop_token:
+                raindrop = RaindropClient(
+                    token=settings.raindrop_token,
+                    collection_id=0,  # not used by update_bookmark
+                )
+                try:
+                    raindrop.update_bookmark(
+                        raindrop_id=settings.raindrop_personal_brief_id,
+                        note=briefing_text,
+                    )
+                    raindrop_id = str(settings.raindrop_personal_brief_id)
+                    published = True
+                    log("INFO", "briefing.raindrop_updated",
+                        raindrop_id=settings.raindrop_personal_brief_id)
+                except RaindropAuthError as exc:
+                    log("ERROR", "briefing.raindrop_auth_failed", error=str(exc))
+                    return {"statusCode": 500, "body": {"briefing_sent": 0, "error": str(exc)}}
 
     # Write to briefing archive
     if do_writes:
@@ -110,21 +172,12 @@ def lambda_handler(event, context):
             candidate_count=candidate_count,
             passed_count=len(stories),
             story_count=len(stories),
-            raindrop_id=str(raindrop_id) if raindrop_id is not None else None,
+            raindrop_id=raindrop_id,
         )
-
-    # FUTURE: Post briefing to recursiveintelligence-website
-    # Requires blog feature to be built first — see docs/plans/website-integration.md
-    # IMPORTANT: AI Abstract (AI_ML) only — Recursive Briefing NEVER publishes to website
-    # if briefing_type == "AI_ML":
-    #     payload = {"briefing_type": briefing_type, "content": briefing_text,
-    #                "date": run_date, "is_public": True}
-    #     requests.post(WEBSITE_WEBHOOK_URL, json=payload,
-    #                   headers={"X-Secret": WEBSITE_WEBHOOK_SECRET})
 
     body = {
         "briefing_type": briefing_type,
-        "briefing_sent": 1 if raindrop_id is not None else 0,
+        "briefing_sent": 1 if published else 0,
         "dry_run": dry_run_mode,
     }
     log("INFO", "briefing.complete", **body)
