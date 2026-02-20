@@ -57,12 +57,17 @@ def _build_items(stories: list) -> list:
     """Map story dicts to BriefItem dicts for the ingest payload."""
     items = []
     for s in stories:
-        if not s.get("url") or not s.get("summary"):
+        url = s.get("url", "")
+        if not url or not s.get("summary"):
             continue
-        source = s.get("feed_name", "") or _source_from_url(s["url"])
+        # isSafeUrl on the site requires https — skip http stories silently
+        if not url.startswith("https://"):
+            log("WARNING", "briefing.item_skipped_unsafe_url", url=url)
+            continue
+        source = s.get("feed_name", "") or _source_from_url(url)
         items.append({
             "title": s["title"],
-            "url": s["url"],
+            "url": url,
             "source": source,
             "snippet": s["summary"],
         })
@@ -98,14 +103,16 @@ def _post_to_site(settings: Settings, briefing_date: str, stories: list,
     try:
         with urllib.request.urlopen(req) as resp:
             status = resp.status
+            body = resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         status = exc.code
+        body = exc.read().decode("utf-8", errors="replace")
 
     if status in (200, 201):
         log("INFO", "briefing.site_ingest_ok", briefing_date=briefing_date)
-    elif status == 409:
-        log("INFO", "briefing.site_ingest_duplicate", briefing_date=briefing_date)
     else:
+        log("ERROR", "briefing.site_ingest_failed", status=status, body=body,
+            briefing_date=briefing_date)
         raise RuntimeError(f"Site ingest returned unexpected status {status}")
 
 
