@@ -154,8 +154,14 @@ def lambda_handler(event, context):
             log("WARNING", "summarizer.newsblur_mark_failed", error=str(exc))
 
     # Rank by score and cap before sending — keeps briefing prompts a manageable size.
+    # Secondary sort by source_type ensures peer-reviewed research beats Reddit commentary
+    # at equal total scores. Tiebreaker only — total score remains primary.
+    _SOURCE_RANK = {"peer-reviewed": 3, "journalism": 2, "commentary": 1, "single-source": 0}
     briefing_cap = MAX_BRIEFING_AI_ML_STORIES if briefing_type == "AI_ML" else MAX_BRIEFING_WORLD_STORIES
-    passed_stories.sort(key=lambda s: s["scores"]["total"], reverse=True)
+    passed_stories.sort(
+        key=lambda s: (s["scores"]["total"], _SOURCE_RANK.get(s.get("source_type", ""), 1)),
+        reverse=True,
+    )
     passed_stories = passed_stories[:briefing_cap]
 
     # Send to briefing queue — always brief if at least one story passed.

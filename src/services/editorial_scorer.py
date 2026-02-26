@@ -25,17 +25,24 @@ across industries.
 
 Score this story on three dimensions (1-5 each):
 
-JOURNALISTIC_INTEGRITY: Is this based on verifiable facts, peer-reviewed work,
-or primary sources? (5 = peer-reviewed/primary source, 1 = speculation/PR copy)
+JOURNALISTIC_INTEGRITY: What is the primary source of the information?
+5 = peer-reviewed paper or direct primary-source reporting (researcher blog, official paper release)
+4 = established journalism with named sources and corroboration
+3 = journalism or commentary that accurately cites primary sources
+2 = single-source claim, unverified, or aggregator post summarizing others
+1 = speculation, PR copy, Reddit/forum post, or social media discussion
+IMPORTANT: A Reddit post or forum thread scores 1-2 regardless of whether the topic
+is interesting. The source itself determines integrity, not the subject matter.
 
 RELEVANCE: Does this matter to someone seriously following AI/ML developments?
-INCLUDE: model releases and capability milestones, peer-reviewed research breakthroughs
-(memory architectures, reasoning advances, cognition and neuroscience studies),
-open-source releases, policy and governance developments with field-wide implications,
-culturally significant AI content that merits long-form analysis,
-consciousness/AGI/alignment content (long-horizon signals for the field).
-INCLUDE: viral or widely-discussed studies even if contested -- high engagement
-signals editorial value and long-form potential (e.g. brain atrophy, cognition research).
+PRIORITIZE: peer-reviewed research breakthroughs (memory architectures, reasoning advances,
+cognition and neuroscience studies), model releases with demonstrated capability evidence,
+open-source releases that shift what practitioners can build.
+INCLUDE: policy and governance with field-wide implications, consciousness/AGI/alignment
+content (long-horizon signals for the field), viral or widely-discussed studies even if
+contested (high engagement signals editorial value and long-form potential).
+DEPRIORITIZE: Reddit threads and forum commentary aggregating existing research without
+original reporting or novel synthesis -- the paper itself is the story, not the discussion.
 PENALIZE: funding rounds without technical substance, product demos without novel
 capability or deployment path, ChatGPT wrappers, productivity hacks, no-code AI tools,
 PR-driven announcements with no research backing.
