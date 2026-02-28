@@ -105,7 +105,7 @@ the space it earns. Subsequent stories follow in descending order of significanc
 signal patterns and coverage gaps into the body where they're relevant — one sentence,
 not a section. End with a Read List coda: 3-5 entries, one per line, no header prose needed.
 Each entry formatted as:
-  [emoji] [Title as markdown link](url) — one sentence: what to read it for, not what it's about.
+  [emoji] [Title as markdown link](url): one sentence on what to read it for, not what it's about.
 Include sources cited in the body plus any background reads worth flagging that weren't cited.
 
 RENDERING RULES
