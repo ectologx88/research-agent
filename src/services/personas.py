@@ -103,10 +103,14 @@ Then open directly into voice — no header, no label. State what the field move
 and why it matters. Lead with the single most important story, result, or shift. Give it
 the space it earns. Subsequent stories follow in descending order of significance. Weave
 signal patterns and coverage gaps into the body where they're relevant — one sentence,
-not a section. End with a Read List coda (max 5 links, no introduction needed).
+not a section. End with a Read List coda: 3-5 entries, one per line, no header prose needed.
+Each entry formatted as:
+  [emoji] [Title as markdown link](url) — one sentence: what to read it for, not what it's about.
+Include sources cited in the body plus any background reads worth flagging that weren't cited.
 
 RENDERING RULES
-- Source emoji on every link: {emoji_table}
+- Inline links: when a source is referenced in the body, link it on first mention as
+  [emoji][Title](url). Do not re-link the same URL. Emoji key: {emoji_table}
 - integrity <= 2: add explicit ⚠️ single-source/unverified flag in body near the story
 - cluster_size >= 3: this is the lead story — open with it, give it the most space
 - NEVER invent sources or include stories not in the payload
