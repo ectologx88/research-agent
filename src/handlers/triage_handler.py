@@ -2,9 +2,18 @@
 import json
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 import boto3
 
+from config.feed_rules import (
+    ALWAYS_SKIP_NAMES,
+    FOLDER_ROUTE_MAP,
+    UNFOLDERD_ROUTE_MAP,
+    Route,
+    _has_ai_ml_keyword,
+)
 from config.scoring_weights import CONTENT_TRUNCATE_CHARS
 from shared.dynamodb_client import StoryStaging, SignalTracker
 from shared.logger import log
@@ -26,7 +35,6 @@ def _truncate_content(content: str, max_chars: int = CONTENT_TRUNCATE_CHARS) -> 
     if last_space > max_chars - 200:
         truncated = truncated[:last_space]
     return truncated + " [truncated]"
-
 
 
 def _check_hn_velocity(url: str) -> int:
@@ -57,10 +65,124 @@ def _check_hn_velocity(url: str) -> int:
         pass  # never raise -- HN lookup is best-effort
     return 0
 
+
+@dataclass
+class FolderConfig:
+    folder_name: str
+    feed_ids: list
+    route: Route
+    sub_bucket: str
+    max_stories: int
+    min_score: int
+    keyword_route: bool = False  # General-Tech: route per story by keyword
+
+
+def _build_folder_configs(folder_map: dict, settings: Settings) -> list[FolderConfig]:
+    """Build per-folder fetch configs from the NewsBlur folder map and settings."""
+    configs = []
+    global_min = settings.newsblur_min_score
+
+    for folder_name, (route, sub_bucket) in FOLDER_ROUTE_MAP.items():
+        feed_ids = folder_map.get(folder_name, [])
+        if not feed_ids:
+            log("WARNING", "newsblur.folder_empty", folder=folder_name)
+            continue
+
+        if folder_name == "AI-ML-Research":
+            max_s = settings.ai_ml_research_max_stories
+            min_s = settings.ai_ml_research_min_score
+        elif folder_name == "AI-ML-Community":
+            max_s = settings.ai_ml_community_max_stories
+            min_s = global_min
+        elif folder_name in ("Current Events & World", "Weather"):
+            max_s = settings.world_news_max_stories
+            min_s = global_min
+        elif folder_name == "World-Science":
+            max_s = settings.world_science_max_stories
+            min_s = 0
+        elif folder_name == "World-Tech":
+            max_s = settings.world_tech_max_stories
+            min_s = global_min
+        else:
+            max_s = 40
+            min_s = global_min
+
+        configs.append(FolderConfig(
+            folder_name=folder_name,
+            feed_ids=feed_ids,
+            route=route,
+            sub_bucket=sub_bucket,
+            max_stories=max_s,
+            min_score=min_s,
+        ))
+
+    # General-Tech — keyword-routed per story
+    general_tech_ids = folder_map.get("General-Tech", [])
+    if general_tech_ids:
+        configs.append(FolderConfig(
+            folder_name="General-Tech",
+            feed_ids=general_tech_ids,
+            route=Route.AI_ML,  # placeholder; overridden per story
+            sub_bucket="tech",  # placeholder
+            max_stories=settings.general_tech_max_stories,
+            min_score=0,
+            keyword_route=True,
+        ))
+    else:
+        log("WARNING", "newsblur.folder_empty", folder="General-Tech")
+
+    return configs
+
+
+def _fetch_folder(newsblur: NewsBlurClient, cfg: FolderConfig, hours_back: int) -> tuple:
+    """Fetch stories for one folder. Returns (cfg, stories, elapsed_ms)."""
+    t0 = time.time()
+    stories = newsblur.fetch_unread_stories(
+        feed_ids=cfg.feed_ids,
+        min_score=cfg.min_score,
+        max_results=cfg.max_stories,
+        hours_back=hours_back,
+    )
+    elapsed_ms = int((time.time() - t0) * 1000)
+    return cfg, stories, elapsed_ms
+
+
+def _route_story(story, cfg: FolderConfig) -> tuple | None:
+    """Return (story, route, sub_bucket) or None if story should be skipped."""
+    feed = story.story_feed_title or ""
+
+    if cfg.keyword_route:
+        # General-Tech: per-story keyword routing
+        if _has_ai_ml_keyword(story.story_title or ""):
+            return story, Route.AI_ML, "research"
+        return story, Route.WORLD, "tech"
+
+    return story, cfg.route, cfg.sub_bucket
+
+
+def _route_unfolderd(stories: list, folder_map: dict) -> tuple[list[tuple], int]:
+    """Route unfolderd (top-level) feed stories using UNFOLDERD_ROUTE_MAP.
+
+    Returns (routed_stories, skip_count) where skip_count is the number of
+    stories dropped because their feed title is in ALWAYS_SKIP_NAMES.
+    """
+    routed = []
+    skip_count = 0
+    for story in stories:
+        feed = story.story_feed_title or ""
+        if feed in ALWAYS_SKIP_NAMES:
+            skip_count += 1
+            continue
+        entry = UNFOLDERD_ROUTE_MAP.get(feed)
+        if entry:
+            routed.append((story, entry[0], entry[1]))
+        # Unknown unfolderd feeds are dropped (no catch-all for safety)
+    return routed, skip_count
+
+
 def lambda_handler(event, context):
     execution_id = str(uuid.uuid4())
     settings = Settings()
-    # Treat any value other than explicit "false" as dry-run (no writes).
     dry_run = settings.dry_run != "false"
     log("INFO", "triage_pipeline.start", execution_id=execution_id, dry_run=dry_run)
 
@@ -80,42 +202,112 @@ def lambda_handler(event, context):
     except Exception as exc:
         log("WARNING", "context_loader.failed", error=str(exc))
 
-    # 2. Fetch stories
-    _t0 = time.time()
-    stories = newsblur.fetch_unread_stories(
-        min_score=settings.newsblur_min_score,
-        max_results=settings.max_stories_per_run,
-        hours_back=settings.newsblur_hours_back,
-    )
-    log("INFO", "newsblur.fetch.complete",
-        elapsed_ms=int((time.time() - _t0) * 1000), count=len(stories))
-
-    # 3. Triage all stories
-    buckets = triage.batch_categorize(stories)
-    ai_ml_stories = buckets[Bucket.AI_ML]
-    world_stories = buckets[Bucket.WORLD]
-    skip_stories = buckets[Bucket.SKIP]
-
-    # Apply per-stream caps before clustering and processing
+    # 2. Get folder → feed ID map; fall back to global river on failure
+    folder_map = {}
+    use_folder_fetch = True
     try:
-        max_ai_ml = int(getattr(settings, "max_ai_ml_stories", 0))
-    except (TypeError, ValueError):
-        max_ai_ml = 0
-    if max_ai_ml > 0:
-        ai_ml_stories = ai_ml_stories[:max_ai_ml]
+        folder_map = newsblur.get_feeds_by_folder()
+    except Exception as exc:
+        log("WARNING", "newsblur.folder_map_failed",
+            error=str(exc), fallback="global_river")
+        use_folder_fetch = False
 
-    try:
-        max_world = int(getattr(settings, "max_world_stories", 0))
-    except (TypeError, ValueError):
-        max_world = 0
-    if max_world > 0:
-        world_stories = world_stories[:max_world]
+    # 3. Fetch stories — per-folder parallel or global fallback
+    all_routed: list[tuple] = []  # (story, Route, sub_bucket)
+    skip_name_count = 0  # stories dropped because feed title is in ALWAYS_SKIP_NAMES
 
-    # 4. Velocity clustering on routed stories
-    routed = [s for s, _ in ai_ml_stories + world_stories]
-    cluster_map = compute_clusters(routed)
+    if use_folder_fetch:
+        folder_configs = _build_folder_configs(folder_map, settings)
 
-    # 5. Deduplicate and process each stream
+        with ThreadPoolExecutor(max_workers=len(folder_configs) or 1) as executor:
+            futures = {
+                executor.submit(_fetch_folder, newsblur, cfg, settings.newsblur_hours_back): cfg
+                for cfg in folder_configs
+            }
+            for future in as_completed(futures):
+                try:
+                    cfg, stories, elapsed_ms = future.result()
+                    log("INFO", "newsblur.folder_fetch_complete",
+                        folder=cfg.folder_name, count=len(stories), elapsed_ms=elapsed_ms)
+                    for story in stories:
+                        result = _route_story(story, cfg)
+                        if result:
+                            all_routed.append(result)
+                except Exception as exc:
+                    cfg = futures[future]
+                    log("WARNING", "newsblur.folder_fetch_failed",
+                        folder=cfg.folder_name, error=str(exc))
+
+        # Route unfolderd feeds
+        unfolderd_ids = folder_map.get("", [])
+        if unfolderd_ids:
+            try:
+                t0 = time.time()
+                unfolderd_stories = newsblur.fetch_unread_stories(
+                    feed_ids=unfolderd_ids,
+                    min_score=settings.newsblur_min_score,
+                    max_results=20,
+                    hours_back=settings.newsblur_hours_back,
+                )
+                elapsed_ms = int((time.time() - t0) * 1000)
+                log("INFO", "newsblur.folder_fetch_complete",
+                    folder="(unfolderd)", count=len(unfolderd_stories), elapsed_ms=elapsed_ms)
+                unfolderd_routed, unfolderd_skipped = _route_unfolderd(unfolderd_stories, folder_map)
+                all_routed.extend(unfolderd_routed)
+                skip_name_count += unfolderd_skipped
+            except Exception as exc:
+                log("WARNING", "newsblur.unfolderd_fetch_failed", error=str(exc))
+
+    else:
+        # Global river fallback
+        _t0 = time.time()
+        stories = newsblur.fetch_unread_stories(
+            min_score=settings.newsblur_min_score,
+            max_results=settings.max_stories_per_run,
+            hours_back=settings.newsblur_hours_back,
+        )
+        log("INFO", "newsblur.fetch.complete",
+            elapsed_ms=int((time.time() - _t0) * 1000), count=len(stories))
+        # Keyword-route all stories in fallback mode
+        for story in stories:
+            feed = story.story_feed_title or ""
+            if feed in ALWAYS_SKIP_NAMES:
+                skip_name_count += 1
+                continue
+            if _has_ai_ml_keyword(story.story_title or ""):
+                all_routed.append((story, Route.AI_ML, "research"))
+            else:
+                all_routed.append((story, Route.WORLD, "news"))
+
+    # 4. Deduplicate by story_hash (keep first occurrence)
+    seen_hashes: set[str] = set()
+    deduped: list[tuple] = []
+    for story, route, sub_bucket in all_routed:
+        if story.story_hash not in seen_hashes:
+            seen_hashes.add(story.story_hash)
+            deduped.append((story, route, sub_bucket))
+
+    # 5. Split into ai_ml and world streams
+    ai_ml_stories: list[tuple] = []
+    world_stories: list[tuple] = []
+    skip_count = skip_name_count  # start with ALWAYS_SKIP_NAMES drops
+
+    for story, route, sub_bucket in deduped:
+        if route == Route.SKIP:
+            skip_count += 1
+        elif route == Route.AI_ML:
+            ai_ml_stories.append((story, sub_bucket))
+        else:
+            world_stories.append((story, sub_bucket))
+
+    log("INFO", "triage.routed",
+        ai_ml=len(ai_ml_stories), world=len(world_stories), skipped=skip_count)
+
+    # 6. Velocity clustering on all routed stories
+    routed_stories = [s for s, _ in ai_ml_stories + world_stories]
+    cluster_map = compute_clusters(routed_stories)
+
+    # 7. Deduplicate and process each stream
     run_time = utcnow()
     time_of_day = "AM" if run_time.hour < 18 else "PM"
     date_str = run_time.strftime("%Y-%m-%d")
@@ -157,7 +349,7 @@ def lambda_handler(event, context):
         dry_run=dry_run,
     )
 
-    # 6. Send SQS messages
+    # 8. Send SQS messages
     if not dry_run:
         if ai_ml_hashes and settings.sqs_aiml_queue_url:
             sqs.send_message(
@@ -185,7 +377,7 @@ def lambda_handler(event, context):
         "dry_run": dry_run,
         "ai_ml_count": len(ai_ml_hashes),
         "world_count": len(world_hashes),
-        "skipped_count": len(skip_stories),
+        "skipped_count": skip_count,
     }
     log("INFO", "triage_pipeline.complete", **body)
     return {"statusCode": 200, "body": body}

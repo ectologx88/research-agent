@@ -85,9 +85,13 @@ resource "aws_lambda_function" "triage" {
       RAINDROP_WORLD_COLLECTION_ID   = data.aws_ssm_parameter.raindrop_world_collection_id.value
       SQS_AIML_QUEUE_URL             = aws_sqs_queue.ai_ml.url
       SQS_WORLD_QUEUE_URL            = aws_sqs_queue.world.url
-      NEWSBLUR_MIN_SCORE             = "1"
-      MAX_AI_ML_STORIES              = "15"
-      MAX_WORLD_STORIES              = "10"
+      AI_ML_RESEARCH_MAX_STORIES     = "40"
+      AI_ML_RESEARCH_MIN_SCORE       = "0"
+      AI_ML_COMMUNITY_MAX_STORIES    = "25"
+      WORLD_NEWS_MAX_STORIES         = "50"
+      WORLD_SCIENCE_MAX_STORIES      = "30"
+      WORLD_TECH_MAX_STORIES         = "25"
+      GENERAL_TECH_MAX_STORIES       = "40"
     }
   }
 

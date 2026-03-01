@@ -110,6 +110,11 @@ def test_pipeline_cap_defaults(monkeypatch):
     monkeypatch.setenv("NEWSBLUR_PASSWORD", "p")
     from src.config import Settings
     s = Settings()
-    assert s.max_ai_ml_stories == 15
-    assert s.max_world_stories == 10
+    assert s.ai_ml_research_max_stories == 40
+    assert s.ai_ml_community_max_stories == 25
+    assert s.world_news_max_stories == 50
+    assert s.world_science_max_stories == 30
+    assert s.world_tech_max_stories == 25
+    assert s.general_tech_max_stories == 40
+    assert s.ai_ml_research_min_score == 0
     assert s.newsblur_hours_back == 12

@@ -22,6 +22,7 @@ def _default_settings():
     s.newsblur_username = "user"
     s.newsblur_password = "pass"
     s.newsblur_min_score = 1
+    s.newsblur_hours_back = 12
     s.max_stories_per_run = 150
     s.dynamodb_region = "us-east-1"
     s.dynamodb_story_staging_table = "story-staging"
@@ -32,7 +33,25 @@ def _default_settings():
     s.sqs_aiml_queue_url = "https://sqs/aiml"
     s.sqs_world_queue_url = "https://sqs/world"
     s.dry_run = "false"
+    # Per-folder caps
+    s.ai_ml_research_max_stories = 40
+    s.ai_ml_community_max_stories = 25
+    s.world_news_max_stories = 50
+    s.world_science_max_stories = 30
+    s.world_tech_max_stories = 25
+    s.general_tech_max_stories = 40
+    s.ai_ml_research_min_score = 0
     return s
+
+
+def _ai_ml_folder_map():
+    """Folder map that routes stories through AI-ML-Research only."""
+    return {"AI-ML-Research": [12345], "": []}
+
+
+def _unfolderd_folder_map():
+    """Folder map that routes stories through unfolderd feeds only."""
+    return {"": [99999]}
 
 
 @patch("src.handlers.triage_handler.ContextLoader")
@@ -47,6 +66,7 @@ def test_routes_aiml_story_to_aiml_collection(
 ):
     mock_settings_cls.return_value = _default_settings()
     story = _make_story(feed="cs.AI updates on arXiv.org", hash="h1")
+    mock_nb_cls.return_value.get_feeds_by_folder.return_value = _ai_ml_folder_map()
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_staging_cls.return_value.check_duplicate.return_value = False
     mock_raindrop_cls.return_value.check_duplicate.return_value = False
@@ -73,6 +93,7 @@ def test_skip_stories_not_saved(
 ):
     mock_settings_cls.return_value = _default_settings()
     story = _make_story(feed="AI / Raindrop.io", title="Meta story", hash="h2")
+    mock_nb_cls.return_value.get_feeds_by_folder.return_value = _unfolderd_folder_map()
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_staging_cls.return_value.check_duplicate.return_value = False
     mock_context_cls.return_value.fetch_all.return_value = {}
@@ -97,6 +118,7 @@ def test_dry_run_skips_writes_and_sqs(
     settings.dry_run = "true"
     mock_settings_cls.return_value = settings
     story = _make_story(feed="cs.AI updates on arXiv.org", hash="h3")
+    mock_nb_cls.return_value.get_feeds_by_folder.return_value = _ai_ml_folder_map()
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_context_cls.return_value.fetch_all.return_value = {}
 
@@ -130,6 +152,7 @@ def test_boost_tags_stored_in_ddb(
         title="Open-source LLM beats GPT-4",
         hash="h4",
     )
+    mock_nb_cls.return_value.get_feeds_by_folder.return_value = _ai_ml_folder_map()
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_staging_cls.return_value.check_duplicate.return_value = False
     mock_raindrop_cls.return_value.check_duplicate.return_value = False
@@ -154,6 +177,7 @@ def test_context_block_stored_with_stories(
 ):
     mock_settings_cls.return_value = _default_settings()
     story = _make_story(hash="h5")
+    mock_nb_cls.return_value.get_feeds_by_folder.return_value = _ai_ml_folder_map()
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_staging_cls.return_value.check_duplicate.return_value = False
     mock_raindrop_cls.return_value.check_duplicate.return_value = False
@@ -179,6 +203,7 @@ def test_candidate_count_in_sqs_message(
 ):
     mock_settings_cls.return_value = _default_settings()
     story = _make_story(hash="h6")
+    mock_nb_cls.return_value.get_feeds_by_folder.return_value = _ai_ml_folder_map()
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_staging_cls.return_value.check_duplicate.return_value = False
     mock_raindrop_cls.return_value.check_duplicate.return_value = False
@@ -211,6 +236,7 @@ def test_hn_velocity_high_adds_boost_tag(
         title="Major open-source LLM release",
         hash="h_hn1",
     )
+    mock_nb_cls.return_value.get_feeds_by_folder.return_value = _ai_ml_folder_map()
     mock_nb_cls.return_value.fetch_unread_stories.return_value = [story]
     mock_staging_cls.return_value.check_duplicate.return_value = False
     mock_raindrop_cls.return_value.check_duplicate.return_value = False

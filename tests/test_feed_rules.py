@@ -1,122 +1,83 @@
 # tests/test_feed_rules.py
 from config.feed_rules import (
-    ALWAYS_AI_ML, ALWAYS_WORLD, ALWAYS_SCIENCE,
-    REDDIT_FEEDS, AMBIGUOUS_FEEDS, ALWAYS_SKIP,
-    get_route, Route
+    FOLDER_ROUTE_MAP,
+    UNFOLDERD_ROUTE_MAP,
+    ALWAYS_SKIP_NAMES,
+    AI_ML_KEYWORDS,
+    Route,
+    _has_ai_ml_keyword,
 )
 
-class TestAlwaysAiMl:
-    def test_arxiv_ai_routes(self):
-        route, sub = get_route("cs.AI updates on arXiv.org", "")
+
+class TestFolderRouteMap:
+    def test_ai_ml_research_routes_to_ai_ml(self):
+        route, sub = FOLDER_ROUTE_MAP["AI-ML-Research"]
         assert route == Route.AI_ML
         assert sub == "research"
 
-    def test_anthropic_news_routes(self):
-        route, sub = get_route("Anthropic News", "")
+    def test_ai_ml_community_routes_to_ai_ml(self):
+        route, sub = FOLDER_ROUTE_MAP["AI-ML-Community"]
         assert route == Route.AI_ML
+        assert sub == "community"
 
-class TestAlwaysWorld:
-    def test_bbc_routes(self):
-        route, sub = get_route("BBC News", "")
+    def test_current_events_routes_to_world_news(self):
+        route, sub = FOLDER_ROUTE_MAP["Current Events & World"]
         assert route == Route.WORLD
         assert sub == "news"
 
-    def test_reuters_substring_match(self):
-        # Exact NewsBlur title may vary — verify on first run
-        route, sub = get_route("Reuters", "")
+    def test_weather_routes_to_world_news(self):
+        route, sub = FOLDER_ROUTE_MAP["Weather"]
         assert route == Route.WORLD
+        assert sub == "news"
 
-class TestAlwaysScience:
-    def test_nature_routes_to_science(self):
-        route, sub = get_route("Nature - Issue - nature.com science feeds", "")
-        assert route == Route.WORLD
-        assert sub == "science"
-
-    def test_neurologica_routes_to_science(self):
-        route, sub = get_route("NeuroLogica Blog", "")
+    def test_world_science_routes_to_world_science(self):
+        route, sub = FOLDER_ROUTE_MAP["World-Science"]
         assert route == Route.WORLD
         assert sub == "science"
 
-class TestAlwaysEntertainment:
+    def test_world_tech_routes_to_world_tech(self):
+        route, sub = FOLDER_ROUTE_MAP["World-Tech"]
+        assert route == Route.WORLD
+        assert sub == "tech"
+
+    def test_general_tech_absent_from_folder_map(self):
+        # General-Tech uses keyword routing — not in FOLDER_ROUTE_MAP
+        assert "General-Tech" not in FOLDER_ROUTE_MAP
+
+
+class TestUnfolderdRouteMap:
     def test_ghostbusters_routes_to_entertainment(self):
-        route, sub = get_route("Ghostbusters News", "")
+        route, sub = UNFOLDERD_ROUTE_MAP["Ghostbusters News"]
         assert route == Route.WORLD
         assert sub == "entertainment"
 
-    def test_apple_newsroom_routes_to_tech(self):
-        route, sub = get_route("Apple Newsroom", "")
-        assert route == Route.WORLD
-        assert sub == "tech"
 
-    def test_macrumors_routes_to_tech(self):
-        route, sub = get_route("MacRumors: Mac News and Rumors - All Stories", "")
-        assert route == Route.WORLD
-        assert sub == "tech"
+class TestAlwaysSkipNames:
+    def test_raindrop_feed_in_skip(self):
+        assert "AI / Raindrop.io" in ALWAYS_SKIP_NAMES
 
-class TestAlwaysSkip:
-    def test_raindrop_feed_skipped(self):
-        route, _ = get_route("AI / Raindrop.io", "")
-        assert route == Route.SKIP
+    def test_newsblur_blog_in_skip(self):
+        assert "The NewsBlur Blog" in ALWAYS_SKIP_NAMES
 
-    def test_newsblur_blog_skipped(self):
-        route, _ = get_route("The NewsBlur Blog", "")
-        assert route == Route.SKIP
 
-class TestRedditFeeds:
-    def test_claudeai_routes_to_ai_ml(self):
-        route, sub = get_route("ClaudeAI", "Claude 3.5 new release")
-        assert route == Route.AI_ML
-        assert sub == "research"
+class TestKeywordRouting:
+    def test_llm_keyword_matches(self):
+        assert _has_ai_ml_keyword("New LLM benchmark shows GPT-5 advantage")
 
-    def test_neuroscience_reddit_routes_to_science(self):
-        route, sub = get_route("top scoring links : neuroscience", "brain plasticity")
-        assert route == Route.WORLD
-        assert sub == "science"
+    def test_claude_keyword_matches(self):
+        assert _has_ai_ml_keyword("Claude 3.5 new release")
 
-    def test_apple_reddit_routes_to_tech(self):
-        route, sub = get_route("top scoring links : apple", "iPhone 17 review")
-        assert route == Route.WORLD
-        assert sub == "tech"
+    def test_non_ai_title_does_not_match(self):
+        assert not _has_ai_ml_keyword("Ask HN: Best coffee grinder")
 
-class TestAmbiguousFeeds:
-    def test_hacker_news_ai_keyword_routes_to_ai_ml(self):
-        route, sub = get_route("Hacker News", "New LLM benchmark shows GPT-5 advantage")
-        assert route == Route.AI_ML
-        assert sub == "research"
+    def test_election_title_does_not_match(self):
+        assert not _has_ai_ml_keyword("Local election results")
 
-    def test_hacker_news_no_keyword_defaults_to_world_tech(self):
-        route, sub = get_route("Hacker News", "Ask HN: Best coffee grinder")
-        assert route == Route.WORLD
-        assert sub == "tech"
+    def test_none_title_is_safe(self):
+        assert not _has_ai_ml_keyword(None)
 
-class TestPrecedence:
-    def test_skip_beats_keyword(self):
-        # Even if title has AI keywords, SKIP feeds are always skipped
-        route, _ = get_route("The NewsBlur Blog", "new LLM model released")
-        assert route == Route.SKIP
+    def test_empty_title_is_safe(self):
+        assert not _has_ai_ml_keyword("")
 
-class TestUnknownFeedFallback:
-    def test_unknown_feed_ai_keyword_routes_to_ai_ml(self):
-        route, sub = get_route("Some Random Blog", "New LLM released today")
-        assert route == Route.AI_ML
-        assert sub == "research"
-
-    def test_unknown_feed_no_keyword_routes_to_world_news(self):
-        route, sub = get_route("Some Random Blog", "Local election results")
-        assert route == Route.WORLD
-        assert sub == "news"
-
-    def test_none_feed_name_routes_to_world_news(self):
-        route, sub = get_route(None, "Local election results")
-        assert route == Route.WORLD
-        assert sub == "news"
-
-    def test_empty_feed_name_routes_to_world_news(self):
-        route, sub = get_route("", "Local election results")
-        assert route == Route.WORLD
-        assert sub == "news"
-
-    def test_none_story_title_is_handled_safely(self):
-        route, sub = get_route("Some Random Blog", None)
-        assert route == Route.WORLD
-        assert sub == "news"
+    def test_anthropic_keyword_matches(self):
+        assert _has_ai_ml_keyword("Anthropic releases new model weights")

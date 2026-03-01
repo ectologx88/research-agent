@@ -1,7 +1,7 @@
 """NewsBlur API client with session management and retry logic."""
 
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import requests
 from tenacity import (
@@ -74,12 +74,38 @@ class NewsBlurClient:
         resp.raise_for_status()
         return resp.json()
 
+    def get_feeds_by_folder(self) -> Dict[str, List[int]]:
+        """Return a mapping of folder name → list of feed IDs.
+
+        The special key "" holds unfolderd (top-level) feed IDs.
+        Calls /reader/feeds which returns the full feed list and folder structure.
+        """
+        data = self._get("/reader/feeds")
+        result: Dict[str, List[int]] = {"": []}
+
+        for entry in data.get("folders", []):
+            if isinstance(entry, int):
+                result[""].append(entry)
+            elif isinstance(entry, dict):
+                for folder_name, id_list in entry.items():
+                    result[folder_name] = [i for i in id_list if isinstance(i, int)]
+
+        total_feeds = sum(len(v) for v in result.values())
+        log_structured(
+            "INFO",
+            "triage.feed_map_loaded",
+            total_folders=len(result) - 1,
+            total_feed_ids=total_feeds,
+        )
+        return result
+
     def fetch_unread_stories(
         self,
         since_timestamp: Optional[datetime] = None,
         hours_back: int = 36,
         min_score: int = 0,
         max_results: int = 100,
+        feed_ids: Optional[List[int]] = None,
     ) -> List[Story]:
         """Fetch unread stories, newest first, with optional filters.
 
@@ -88,6 +114,7 @@ class NewsBlurClient:
             hours_back: Fallback window when *since_timestamp* is None.
             min_score: Minimum NewsBlur intelligence score (-1, 0, or 1).
             max_results: Hard cap on returned stories.
+            feed_ids: If set, restrict fetch to these feed IDs (river_stories feeds[] param).
         """
         cutoff = since_timestamp or (utcnow() - timedelta(hours=hours_back))
         stories: List[Story] = []
@@ -95,14 +122,17 @@ class NewsBlurClient:
         now = utcnow()
 
         while len(stories) < max_results:
+            params: dict = {
+                "page": page,
+                "order": "newest",
+                "read_filter": "unread",
+                "include_story_content": "true",
+            }
+            if feed_ids:
+                params["feeds[]"] = feed_ids
             data = self._get(
                 "/reader/river_stories",
-                params={
-                    "page": page,
-                    "order": "newest",
-                    "read_filter": "unread",
-                    "include_story_content": "true",
-                },
+                params=params,
             )
 
             raw_stories = data.get("stories", [])
