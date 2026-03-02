@@ -4,10 +4,11 @@
 Threshold history:
 - AI_ML: started at 9, dropped to 8, then 7 as biased scorer underscored
   non-industrial content. Restored to 9 after fixing scorer prompt.
+  Lowered to 8 again (2026-03-01) to avoid thin briefings on light PM runs.
 - WORLD: keeping at 7 -- world content is more variable.
 """
 
-AI_ML_PASS_THRESHOLD = 9    # out of 15 -- restored after fixing scorer prompt bias
+AI_ML_PASS_THRESHOLD = 8    # out of 15
 WORLD_PASS_THRESHOLD = 7    # out of 15 (lowered from 8)
 MIN_STORIES_FOR_BRIEFING = 1  # always brief if any story passes; log thin_briefing if < 3
 MAX_AI_ML_STORIES = 40      # triage cap — how many candidates to score
