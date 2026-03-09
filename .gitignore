@@ -28,3 +28,4 @@ terraform/plan.out
 .DS_Store
 .worktrees/
 response.json
+copilot-instructions.md
