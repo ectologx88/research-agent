@@ -163,9 +163,16 @@ class ScoringResult:
     @classmethod
     def from_json(cls, raw: str) -> "ScoringResult":
         try:
+            text = raw.strip()
+            # Strip markdown fences — Haiku 4.5 wraps JSON in ```json...``` more often
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+                text = text.strip()
             # raw_decode stops at the end of the first valid JSON object,
             # tolerating trailing newlines or extra text Haiku sometimes appends.
-            data, _ = json.JSONDecoder().raw_decode(raw.strip())
+            data, _ = json.JSONDecoder().raw_decode(text)
         except json.JSONDecodeError as exc:
             raise ValueError(f"Haiku returned invalid JSON: {exc}\nRaw: {raw[:200]}") from exc
         required = {"integrity", "relevance", "novelty", "total", "decision",
