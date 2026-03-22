@@ -164,12 +164,14 @@ class ScoringResult:
     def from_json(cls, raw: str) -> "ScoringResult":
         try:
             text = raw.strip()
-            # Strip markdown fences — Haiku 4.5 wraps JSON in ```json...``` more often
+            # Strip markdown fences — Haiku 4.5 wraps JSON in ```json...``` more often.
+            # Use line-based stripping to avoid IndexError on unclosed fences.
             if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-                text = text.strip()
+                lines = text.splitlines()
+                lines = lines[1:]  # drop opening fence line (``` or ```json)
+                if lines and lines[-1].strip().startswith("```"):
+                    lines = lines[:-1]  # drop closing fence if present
+                text = "\n".join(lines).strip()
             # raw_decode stops at the end of the first valid JSON object,
             # tolerating trailing newlines or extra text Haiku sometimes appends.
             data, _ = json.JSONDecoder().raw_decode(text)
