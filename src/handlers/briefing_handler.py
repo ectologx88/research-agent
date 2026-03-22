@@ -249,16 +249,7 @@ def lambda_handler(event, context):
                           title=f"The AI Abstract — {edition}",
                           description=description)
             published = True
-        else:  # WORLD — post to private site page + update Raindrop bookmark
-            # Site post is non-fatal for WORLD; Raindrop is the primary delivery
-            description, clean_body = _extract_description(briefing_text)
-            try:
-                _post_to_site(settings, briefing_date, stories, clean_body,
-                              category="World",
-                              title=f"The Recursive Briefing — {briefing_date}",
-                              description=description)
-            except RuntimeError as exc:
-                log("WARNING", "briefing.world_site_ingest_failed", error=str(exc))
+        else:  # WORLD — Raindrop bookmark + Telegram (no site post)
             if settings.raindrop_token:
                 raindrop = RaindropClient(
                     token=settings.raindrop_token,
