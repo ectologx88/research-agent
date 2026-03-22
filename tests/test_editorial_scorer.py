@@ -38,6 +38,39 @@ class TestScoringResultParsing:
         with pytest.raises(ValueError):
             ScoringResult.from_json(json.dumps({"integrity": 3}))
 
+    def test_strips_markdown_fences_from_haiku_response(self):
+        """Haiku 4.5 wraps JSON in ```json...``` — must be stripped before parsing."""
+        inner = json.dumps({
+            "integrity": 4, "relevance": 5, "novelty": 4, "total": 13,
+            "decision": "PASS", "source_type": "journalism",
+            "reasoning": "Strong sourcing.", "summary": "Sentence one. Sentence two."
+        })
+        fenced = f"```json\n{inner}\n```"
+        result = ScoringResult.from_json(fenced)
+        assert result.decision == "PASS"
+        assert result.total == 13
+
+    def test_strips_plain_markdown_fences(self):
+        inner = json.dumps({
+            "integrity": 2, "relevance": 2, "novelty": 2, "total": 6,
+            "decision": "REJECT", "source_type": "commentary",
+            "reasoning": "No sources.", "summary": None
+        })
+        fenced = f"```\n{inner}\n```"
+        result = ScoringResult.from_json(fenced)
+        assert result.decision == "REJECT"
+
+    def test_strips_unclosed_markdown_fence_no_index_error(self):
+        """Malformed response with opening fence but no closing fence must not raise IndexError."""
+        inner = json.dumps({
+            "integrity": 3, "relevance": 3, "novelty": 3, "total": 9,
+            "decision": "PASS", "source_type": "journalism",
+            "reasoning": "Solid sourcing.", "summary": "One. Two."
+        })
+        unclosed = f"```json\n{inner}"  # no closing ```
+        result = ScoringResult.from_json(unclosed)
+        assert result.decision == "PASS"
+
 
 class TestScoringPromptContent:
     def test_ai_ml_prompt_includes_rdd_context(self):
