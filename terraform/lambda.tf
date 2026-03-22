@@ -58,6 +58,16 @@ data "aws_ssm_parameter" "brief_api_key" {
   with_decryption = true
 }
 
+data "aws_ssm_parameter" "telegram_bot_token" {
+  name            = "/prod/ResearchAgent/Telegram_Bot_Token"
+  with_decryption = true
+}
+
+data "aws_ssm_parameter" "telegram_chat_id" {
+  name            = "/prod/ResearchAgent/Telegram_Chat_Id"
+  with_decryption = false
+}
+
 resource "aws_lambda_function" "triage" {
   function_name = "research-agent-triage"
   role          = aws_iam_role.lambda.arn
@@ -129,7 +139,7 @@ resource "aws_lambda_function" "summarizer" {
       DYNAMODB_REGION                = "us-east-1"
       DYNAMODB_STORY_STAGING_TABLE   = aws_dynamodb_table.story_staging.name
       BEDROCK_REGION                 = "us-east-1"
-      BEDROCK_SUMMARIZER_MODEL_ID    = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+      BEDROCK_SUMMARIZER_MODEL_ID    = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
       SQS_BRIEFING_QUEUE_URL         = aws_sqs_queue.briefing.url
       NEWSBLUR_USERNAME              = data.aws_ssm_parameter.newsblur_user.value
       NEWSBLUR_PASSWORD              = data.aws_ssm_parameter.newsblur_pass.value
@@ -173,6 +183,8 @@ resource "aws_lambda_function" "briefing" {
       DYNAMODB_BRIEFING_TABLE      = aws_dynamodb_table.briefing_archive.name
       BEDROCK_REGION               = "us-east-1"
       BEDROCK_BRIEFING_MODEL_ID    = "us.anthropic.claude-sonnet-4-6"
+      TELEGRAM_BOT_TOKEN           = data.aws_ssm_parameter.telegram_bot_token.value
+      TELEGRAM_CHAT_ID             = data.aws_ssm_parameter.telegram_chat_id.value
     }
   }
 

@@ -1,5 +1,6 @@
 """Lambda 3: Synthesize narrative briefing and publish."""
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -72,6 +73,102 @@ def _build_items(stories: list) -> list:
             "snippet": s["summary"],
         })
     return items
+
+
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+_SAFE_URL_SCHEMES = ("https://", "http://")
+
+
+def _safe_url(url: str) -> str:
+    """Return url only if it uses an allowed scheme; otherwise return empty string."""
+    return url if any(url.startswith(s) for s in _SAFE_URL_SCHEMES) else ""
+
+
+def _inline_md(text: str) -> str:
+    """Convert inline markdown to Telegram HTML: bold and links.
+
+    URLs are scheme-validated before being placed in href attributes to prevent
+    markup injection from unexpected LLM output.
+    """
+    parts = []
+    remaining = text
+    while remaining:
+        m = re.search(r'\[([^\]]*)\]\(([^)]+)\)', remaining)
+        if m:
+            before = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(remaining[:m.start()]))
+            parts.append(before)
+            url = _safe_url(m.group(2).strip())
+            link_text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(m.group(1)))
+            parts.append(f'<a href="{url}">{link_text}</a>' if url else link_text)
+            remaining = remaining[m.end():]
+        else:
+            parts.append(re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(remaining)))
+            break
+    return "".join(parts)
+
+
+def _md_to_telegram_html(text: str) -> str:
+    """Convert brief markdown to Telegram HTML parse_mode format."""
+    lines = []
+    for line in text.splitlines():
+        m = re.match(r'^#{1,3}\s+(.*)', line)
+        lines.append("<b>" + _inline_md(m.group(1)) + "</b>" if m else _inline_md(line))
+    return "\n".join(lines)
+
+
+def _chunk_telegram_html(html: str, max_len: int = 4096) -> list[str]:
+    """Split Telegram HTML into chunks, avoiding splits inside tags or entities."""
+    chunks: list[str] = []
+    while html:
+        if len(html) <= max_len:
+            chunks.append(html)
+            break
+        split_at = html.rfind("\n", 0, max_len)
+        if split_at == -1:
+            split_at = max_len
+        candidate = html[:split_at]
+        # Back up past any incomplete HTML tag
+        last_lt = candidate.rfind("<")
+        last_gt = candidate.rfind(">")
+        if last_lt != -1 and last_lt > last_gt:
+            split_at = last_lt
+            candidate = html[:split_at]
+        # Back up past any incomplete HTML entity
+        last_amp = candidate.rfind("&")
+        last_semi = candidate.rfind(";")
+        if last_amp != -1 and last_amp > last_semi:
+            split_at = last_amp
+            candidate = html[:split_at]
+        if split_at <= 0:
+            split_at = max_len
+            candidate = html[:split_at]
+        chunks.append(candidate)
+        html = html[split_at:].lstrip("\n")
+    return chunks
+
+
+def _send_telegram(token: str, chat_id: str, text: str) -> None:
+    """Convert brief markdown to Telegram HTML and send, splitting at 4096-char limit."""
+    html = _md_to_telegram_html(text)
+    chunks = _chunk_telegram_html(html)
+
+    for chunk in chunks:
+        payload = json.dumps({
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": "HTML",
+        }).encode()
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
 
 
 def _post_to_site(settings: Settings, briefing_date: str, stories: list,
@@ -186,16 +283,7 @@ def lambda_handler(event, context):
                           title=f"The AI Abstract — {edition}",
                           description=description)
             published = True
-        else:  # WORLD — post to private site page + update Raindrop bookmark
-            # Site post is non-fatal for WORLD; Raindrop is the primary delivery
-            description, clean_body = _extract_description(briefing_text)
-            try:
-                _post_to_site(settings, briefing_date, stories, clean_body,
-                              category="World",
-                              title=f"The Recursive Briefing — {briefing_date}",
-                              description=description)
-            except RuntimeError as exc:
-                log("WARNING", "briefing.world_site_ingest_failed", error=str(exc))
+        else:  # WORLD — Raindrop bookmark + Telegram (no site post)
             if settings.raindrop_token:
                 raindrop = RaindropClient(
                     token=settings.raindrop_token,
@@ -213,6 +301,12 @@ def lambda_handler(event, context):
                 except RaindropAuthError as exc:
                     log("ERROR", "briefing.raindrop_auth_failed", error=str(exc))
                     return {"statusCode": 500, "body": {"briefing_sent": 0, "error": str(exc)}}
+            if settings.telegram_bot_token and settings.telegram_chat_id:
+                try:
+                    _send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, briefing_text)
+                    log("INFO", "briefing.telegram_sent")
+                except Exception as exc:
+                    log("WARNING", "briefing.telegram_failed", error=str(exc))
 
     # Write to briefing archive
     if do_writes:

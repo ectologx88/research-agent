@@ -335,3 +335,70 @@ def test_aiml_title_evening_edition():
 
     _, kwargs = mock_post.call_args
     assert kwargs["title"] == "The AI Abstract — Evening Edition"
+
+
+class TestTelegramHelpers:
+    """Unit tests for Telegram markdown-to-HTML conversion and chunking helpers."""
+
+    def test_escape_html_ampersand(self):
+        assert handler_mod._escape_html("a & b") == "a &amp; b"
+
+    def test_escape_html_angle_brackets(self):
+        assert handler_mod._escape_html("<script>") == "&lt;script&gt;"
+
+    def test_inline_md_bold(self):
+        result = handler_mod._inline_md("this is **bold** text")
+        assert "<b>bold</b>" in result
+        assert "**" not in result
+
+    def test_inline_md_link_renders(self):
+        result = handler_mod._inline_md("[Click](https://example.com)")
+        assert '<a href="https://example.com">Click</a>' == result
+
+    def test_inline_md_unsafe_url_stripped(self):
+        result = handler_mod._inline_md("[Evil](javascript:alert(1))")
+        assert "href" not in result
+        assert "Evil" in result
+
+    def test_inline_md_http_url_allowed(self):
+        result = handler_mod._inline_md("[Link](http://example.com)")
+        assert 'href="http://example.com"' in result
+
+    def test_md_to_telegram_html_strips_header_hashes(self):
+        result = handler_mod._md_to_telegram_html("## Section Title")
+        assert "##" not in result
+        assert "<b>Section Title</b>" == result
+
+    def test_md_to_telegram_html_multiline(self):
+        result = handler_mod._md_to_telegram_html("# Title\nSome **bold** text.")
+        lines = result.splitlines()
+        assert lines[0] == "<b>Title</b>"
+        assert "<b>bold</b>" in lines[1]
+
+    def test_chunk_telegram_html_short_text(self):
+        chunks = handler_mod._chunk_telegram_html("short", max_len=4096)
+        assert chunks == ["short"]
+
+    def test_chunk_telegram_html_splits_on_newline(self):
+        text = "line one\nline two\nline three"
+        chunks = handler_mod._chunk_telegram_html(text, max_len=15)
+        assert all(len(c) <= 15 for c in chunks)
+        assert "".join(chunks).replace("\n", "") == "line one" + "line two" + "line three"
+
+    def test_chunk_telegram_html_avoids_splitting_inside_tag(self):
+        # Put an opening tag near the split boundary
+        html = "abc " + "<b>bold</b>" + " def"
+        # max_len chosen so naive split falls inside the <b> tag
+        chunks = handler_mod._chunk_telegram_html(html, max_len=6)
+        for chunk in chunks:
+            # No chunk should start with a bare tag fragment like 'b>...'
+            assert not chunk.startswith("b>") and not chunk.startswith("/b>")
+
+    def test_safe_url_allows_https(self):
+        assert handler_mod._safe_url("https://example.com") == "https://example.com"
+
+    def test_safe_url_blocks_javascript(self):
+        assert handler_mod._safe_url("javascript:alert(1)") == ""
+
+    def test_safe_url_blocks_data_uri(self):
+        assert handler_mod._safe_url("data:text/html,<h1>hi</h1>") == ""
