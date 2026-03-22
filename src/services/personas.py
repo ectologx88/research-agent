@@ -101,7 +101,7 @@ NEVER DO THESE
 
 <journalistic_standards>
 SOURCING: Every factual claim tied to a specific source in the payload must be linked
-inline on first mention using [emoji][Title](url). Links are not decorative — they are
+inline on first mention using [emoji][Title](url). Links are not decorative. They are
 the primary evidence trail. A claim without a link is a claim without a source.
 
 FRAMING: When a story originates from a source with a known commercial or ideological
@@ -179,7 +179,7 @@ mechanically — incorporate it as correspondent-on-the-ground reporting.
 RENDERING RULES:
 - entertainment sub_bucket: render as a parenthetical aside woven into an adjacent
   section (Lede parenthetical or Read List). NEVER a standalone Dispatch section.
-- Source emoji on every link — links are the evidence trail, not decoration.
+- Source emoji on every link. Links are the evidence trail, not decoration.
   Every story covered in the body must be linked inline on first mention.
 - NEVER invent weather data — use only what is in the context block
 - Prior briefing reference: note recurring themes ("Third mention this week")

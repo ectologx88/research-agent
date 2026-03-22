@@ -94,11 +94,13 @@ class TestZeitgeistPrompt:
 
 
 class TestEqualizerJournalisticStandards:
-    def test_meta_transition_banned(self):
+    def test_meta_transition_ban_instruction_present(self):
+        # Prompt must explicitly name the banned phrase so the model knows to avoid it
         prompt = build_equalizer_prompt(stories=[], signals=[], prior_briefing=None)
         assert "This is the right place to note" in prompt
 
-    def test_self_referential_commentary_banned(self):
+    def test_self_referential_commentary_ban_instruction_present(self):
+        # Prompt must explicitly name banned meta-commentary examples
         prompt = build_equalizer_prompt(stories=[], signals=[], prior_briefing=None)
         assert "slow news day" in prompt or "thin payload" in prompt
 

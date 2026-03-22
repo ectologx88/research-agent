@@ -79,8 +79,20 @@ def _escape_html(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+_SAFE_URL_SCHEMES = ("https://", "http://")
+
+
+def _safe_url(url: str) -> str:
+    """Return url only if it uses an allowed scheme; otherwise return empty string."""
+    return url if any(url.startswith(s) for s in _SAFE_URL_SCHEMES) else ""
+
+
 def _inline_md(text: str) -> str:
-    """Convert inline markdown to Telegram HTML: bold and links."""
+    """Convert inline markdown to Telegram HTML: bold and links.
+
+    URLs are scheme-validated before being placed in href attributes to prevent
+    markup injection from unexpected LLM output.
+    """
     parts = []
     remaining = text
     while remaining:
@@ -88,8 +100,9 @@ def _inline_md(text: str) -> str:
         if m:
             before = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(remaining[:m.start()]))
             parts.append(before)
+            url = _safe_url(m.group(2).strip())
             link_text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(m.group(1)))
-            parts.append(f'<a href="{m.group(2)}">{link_text}</a>')
+            parts.append(f'<a href="{url}">{link_text}</a>' if url else link_text)
             remaining = remaining[m.end():]
         else:
             parts.append(re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(remaining)))
@@ -106,20 +119,41 @@ def _md_to_telegram_html(text: str) -> str:
     return "\n".join(lines)
 
 
+def _chunk_telegram_html(html: str, max_len: int = 4096) -> list[str]:
+    """Split Telegram HTML into chunks, avoiding splits inside tags or entities."""
+    chunks: list[str] = []
+    while html:
+        if len(html) <= max_len:
+            chunks.append(html)
+            break
+        split_at = html.rfind("\n", 0, max_len)
+        if split_at == -1:
+            split_at = max_len
+        candidate = html[:split_at]
+        # Back up past any incomplete HTML tag
+        last_lt = candidate.rfind("<")
+        last_gt = candidate.rfind(">")
+        if last_lt != -1 and last_lt > last_gt:
+            split_at = last_lt
+            candidate = html[:split_at]
+        # Back up past any incomplete HTML entity
+        last_amp = candidate.rfind("&")
+        last_semi = candidate.rfind(";")
+        if last_amp != -1 and last_amp > last_semi:
+            split_at = last_amp
+            candidate = html[:split_at]
+        if split_at <= 0:
+            split_at = max_len
+            candidate = html[:split_at]
+        chunks.append(candidate)
+        html = html[split_at:].lstrip("\n")
+    return chunks
+
+
 def _send_telegram(token: str, chat_id: str, text: str) -> None:
     """Convert brief markdown to Telegram HTML and send, splitting at 4096-char limit."""
     html = _md_to_telegram_html(text)
-    MAX_LEN = 4096
-    chunks = []
-    while html:
-        if len(html) <= MAX_LEN:
-            chunks.append(html)
-            break
-        split_at = html.rfind('\n', 0, MAX_LEN)
-        if split_at == -1:
-            split_at = MAX_LEN
-        chunks.append(html[:split_at])
-        html = html[split_at:].lstrip('\n')
+    chunks = _chunk_telegram_html(html)
 
     for chunk in chunks:
         payload = json.dumps({
