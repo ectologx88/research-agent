@@ -1,5 +1,6 @@
 """Lambda 3: Synthesize narrative briefing and publish."""
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -72,6 +73,68 @@ def _build_items(stories: list) -> list:
             "snippet": s["summary"],
         })
     return items
+
+
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _inline_md(text: str) -> str:
+    """Convert inline markdown to Telegram HTML: bold and links."""
+    parts = []
+    remaining = text
+    while remaining:
+        m = re.search(r'\[([^\]]*)\]\(([^)]+)\)', remaining)
+        if m:
+            before = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(remaining[:m.start()]))
+            parts.append(before)
+            link_text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(m.group(1)))
+            parts.append(f'<a href="{m.group(2)}">{link_text}</a>')
+            remaining = remaining[m.end():]
+        else:
+            parts.append(re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', _escape_html(remaining)))
+            break
+    return "".join(parts)
+
+
+def _md_to_telegram_html(text: str) -> str:
+    """Convert brief markdown to Telegram HTML parse_mode format."""
+    lines = []
+    for line in text.splitlines():
+        m = re.match(r'^#{1,3}\s+(.*)', line)
+        lines.append("<b>" + _inline_md(m.group(1)) + "</b>" if m else _inline_md(line))
+    return "\n".join(lines)
+
+
+def _send_telegram(token: str, chat_id: str, text: str) -> None:
+    """Convert brief markdown to Telegram HTML and send, splitting at 4096-char limit."""
+    html = _md_to_telegram_html(text)
+    MAX_LEN = 4096
+    chunks = []
+    while html:
+        if len(html) <= MAX_LEN:
+            chunks.append(html)
+            break
+        split_at = html.rfind('\n', 0, MAX_LEN)
+        if split_at == -1:
+            split_at = MAX_LEN
+        chunks.append(html[:split_at])
+        html = html[split_at:].lstrip('\n')
+
+    for chunk in chunks:
+        payload = json.dumps({
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": "HTML",
+        }).encode()
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
 
 
 def _post_to_site(settings: Settings, briefing_date: str, stories: list,
@@ -213,6 +276,12 @@ def lambda_handler(event, context):
                 except RaindropAuthError as exc:
                     log("ERROR", "briefing.raindrop_auth_failed", error=str(exc))
                     return {"statusCode": 500, "body": {"briefing_sent": 0, "error": str(exc)}}
+            if settings.telegram_bot_token and settings.telegram_chat_id:
+                try:
+                    _send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, briefing_text)
+                    log("INFO", "briefing.telegram_sent")
+                except Exception as exc:
+                    log("WARNING", "briefing.telegram_failed", error=str(exc))
 
     # Write to briefing archive
     if do_writes:

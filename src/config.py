@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Bedrock
     bedrock_region: str = "us-east-1"
-    bedrock_summarizer_model_id: str = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+    bedrock_summarizer_model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     # Storage
     dynamodb_table_name: str = "newsblur-processing-state"
@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     dynamodb_story_staging_table: str = "story-staging"
     dynamodb_signal_table: str = "signal-tracker"
     dynamodb_briefing_table: str = "briefing-archive"
+
+    # Telegram delivery (WORLD brief)
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
     # DRY_RUN modes: "false" | "true" | "writes_only"
     # "true"         = no LLM calls, no writes, no SQS (pure dry run)

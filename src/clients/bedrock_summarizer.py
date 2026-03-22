@@ -41,7 +41,7 @@ Return this exact JSON structure:
 class BedrockSummarizerClient:
     """Summarizes individual stories using Claude Haiku."""
 
-    def __init__(self, region: str = "us-east-1", model_id: str = "us.anthropic.claude-3-5-haiku-20241022-v1:0"):
+    def __init__(self, region: str = "us-east-1", model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"):
         self._model_id = model_id
         self._bedrock = boto3.client("bedrock-runtime", region_name=region)
 
