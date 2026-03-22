@@ -4,6 +4,7 @@ from src.services.personas import (
     build_zeitgeist_prompt,
     SOURCE_EMOJI,
 )
+from src.services.editorial_scorer import EditorialScorer
 
 
 class TestSourceEmoji:
@@ -71,3 +72,54 @@ class TestZeitgeistPrompt:
             stories=[], signals=[], prior_briefing=None, context_block=""
         )
         assert "specific story" in prompt.lower() or "anchor" in prompt.lower()
+
+    def test_no_third_person_correspondent_instruction(self):
+        prompt = build_zeitgeist_prompt(
+            stories=[], signals=[], prior_briefing=None, context_block=""
+        )
+        assert "third person" in prompt.lower() or "third-person" in prompt.lower()
+
+    def test_journalistic_standards_present(self):
+        prompt = build_zeitgeist_prompt(
+            stories=[], signals=[], prior_briefing=None, context_block=""
+        )
+        assert "journalistic_standards" in prompt
+        assert "framing" in prompt.lower()
+
+    def test_link_requirement_present(self):
+        prompt = build_zeitgeist_prompt(
+            stories=[], signals=[], prior_briefing=None, context_block=""
+        )
+        assert "evidence trail" in prompt.lower() or "links are" in prompt.lower()
+
+
+class TestEqualizerJournalisticStandards:
+    def test_meta_transition_banned(self):
+        prompt = build_equalizer_prompt(stories=[], signals=[], prior_briefing=None)
+        assert "This is the right place to note" in prompt
+
+    def test_self_referential_commentary_banned(self):
+        prompt = build_equalizer_prompt(stories=[], signals=[], prior_briefing=None)
+        assert "slow news day" in prompt or "thin payload" in prompt
+
+    def test_journalistic_standards_block_present(self):
+        prompt = build_equalizer_prompt(stories=[], signals=[], prior_briefing=None)
+        assert "journalistic_standards" in prompt
+
+    def test_depth_guidance_present(self):
+        prompt = build_equalizer_prompt(stories=[], signals=[], prior_briefing=None)
+        assert "cluster_size" in prompt
+        assert "integrity" in prompt
+
+
+class TestScorerHardGates:
+    def test_ai_ml_prompt_contains_reddit_hard_gate(self):
+        scorer = EditorialScorer()
+        prompt = scorer._build_prompt("AI_ML", "title", "content", "reddit.com", "research", [])
+        assert "hard_gate" in prompt
+        assert "REDDIT" in prompt or "Reddit" in prompt
+
+    def test_world_prompt_contains_sourcing_hard_gate(self):
+        scorer = EditorialScorer()
+        prompt = scorer._build_prompt("WORLD", "title", "content", "reddit.com", "science", [])
+        assert "hard_gate" in prompt

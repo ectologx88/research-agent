@@ -57,6 +57,15 @@ velocity:hn-medium  -> moderate boost; gaining traction (50-199 HN points)
 long-signal:rdd     -> never penalize; slow-burn signals about AI consciousness,
                        alignment, and cognition that compound over years
 
+<hard_gate>
+REDDIT/FORUM OVERRIDE: If the feed is Reddit, Hacker News comments, or any community
+forum, AND the story content contains no direct link or citation to an external primary
+source (a paper, official release, or original journalism), the decision MUST be REJECT
+regardless of total score. High relevance and novelty cannot compensate for a missing
+primary source. The Reddit post is not the story — the source it points to is the story.
+If it points to nothing verifiable, there is no story to pass.
+</hard_gate>
+
 Return ONLY valid JSON -- no explanation, no markdown:
 {{
   "integrity": <1-5>,
@@ -104,6 +113,12 @@ is about AI/ML if its primary subject is a model, benchmark, training run, or AI
 company product. Exception: broad societal/policy impact of AI is WORLD-relevant.
 
 NOVELTY: Is this genuinely new, or a daily churn story that will look the same tomorrow?
+
+<hard_gate>
+SOURCING OVERRIDE: If the only available source is a Reddit post, forum thread, or
+social media discussion with no link to original reporting or a primary source,
+the decision MUST be REJECT regardless of total score.
+</hard_gate>
 
 Return ONLY valid JSON — no explanation, no markdown:
 {{
