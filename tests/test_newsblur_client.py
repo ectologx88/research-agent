@@ -81,7 +81,7 @@ class TestFetchStories:
                 {"stories": []},
             ]
 
-            stories = client.fetch_unread_stories(hours_back=720, max_results=50)
+            stories = client.fetch_unread_stories(hours_back=2400, max_results=50)
             assert len(stories) == len(sample_stories_raw)
             assert stories[0].story_hash == "abc123:feed1"
             assert stories[0].newsblur_score == 1
@@ -92,7 +92,7 @@ class TestFetchStories:
 
         with patch.object(client, "_get") as mock_get:
             mock_get.return_value = {"stories": sample_stories_raw}
-            stories = client.fetch_unread_stories(hours_back=720, max_results=2)
+            stories = client.fetch_unread_stories(hours_back=2400, max_results=2)
             assert len(stories) == 2
 
     def test_filters_by_min_score(self, sample_stories_raw):
@@ -106,7 +106,7 @@ class TestFetchStories:
             ]
             # min_score=1 should exclude the neutral story (ghi789)
             stories = client.fetch_unread_stories(
-                hours_back=720, min_score=1, max_results=50
+                hours_back=2400, min_score=1, max_results=50
             )
             hashes = {s.story_hash for s in stories}
             assert "ghi789:feed3" not in hashes
