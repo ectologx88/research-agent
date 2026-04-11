@@ -10,21 +10,16 @@ class Route(str, Enum):
 
 
 # Maps NewsBlur folder name → (Route, sub_bucket).
-# Used by triage_handler to route all stories fetched from a folder's river.
 # General-Tech is absent — handled by per-story keyword routing in triage_handler.
+# WORLD stream disabled (2026-04-11) — see design doc.
 FOLDER_ROUTE_MAP: dict[str, tuple[Route, str]] = {
-    "AI-ML-Research":         (Route.AI_ML, "research"),
-    "AI-ML-Community":        (Route.AI_ML, "community"),
-    "Current Events & World": (Route.WORLD, "news"),
-    "Weather":                (Route.WORLD, "news"),
-    "World-Science":          (Route.WORLD, "science"),
-    "World-Tech":             (Route.WORLD, "tech"),
+    "AI-ML-Research":  (Route.AI_ML, "research"),
+    "AI-ML-Community": (Route.AI_ML, "community"),
+    "AI-ML-Primary":   (Route.AI_ML, "research"),
 }
 
-# Unfolderd (top-level) feeds routed by exact feed title.
-UNFOLDERD_ROUTE_MAP: dict[str, tuple[Route, str]] = {
-    "Ghostbusters News": (Route.WORLD, "entertainment"),
-}
+# No unfolderd feeds active. Ghostbusters News was WORLD/entertainment — stream disabled.
+UNFOLDERD_ROUTE_MAP: dict[str, tuple[Route, str]] = {}
 
 # Feed titles to skip regardless of folder (circular / meta feeds).
 ALWAYS_SKIP_NAMES: set[str] = {

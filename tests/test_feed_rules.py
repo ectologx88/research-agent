@@ -20,36 +20,17 @@ class TestFolderRouteMap:
         assert route == Route.AI_ML
         assert sub == "community"
 
-    def test_current_events_routes_to_world_news(self):
-        route, sub = FOLDER_ROUTE_MAP["Current Events & World"]
-        assert route == Route.WORLD
-        assert sub == "news"
-
-    def test_weather_routes_to_world_news(self):
-        route, sub = FOLDER_ROUTE_MAP["Weather"]
-        assert route == Route.WORLD
-        assert sub == "news"
-
-    def test_world_science_routes_to_world_science(self):
-        route, sub = FOLDER_ROUTE_MAP["World-Science"]
-        assert route == Route.WORLD
-        assert sub == "science"
-
-    def test_world_tech_routes_to_world_tech(self):
-        route, sub = FOLDER_ROUTE_MAP["World-Tech"]
-        assert route == Route.WORLD
-        assert sub == "tech"
-
     def test_general_tech_absent_from_folder_map(self):
-        # General-Tech uses keyword routing — not in FOLDER_ROUTE_MAP
         assert "General-Tech" not in FOLDER_ROUTE_MAP
+
+    def test_world_folders_absent(self):
+        for name in ("Current Events & World", "Weather", "World-Science", "World-Tech"):
+            assert name not in FOLDER_ROUTE_MAP, f"{name!r} should not be in FOLDER_ROUTE_MAP"
 
 
 class TestUnfolderdRouteMap:
-    def test_ghostbusters_routes_to_entertainment(self):
-        route, sub = UNFOLDERD_ROUTE_MAP["Ghostbusters News"]
-        assert route == Route.WORLD
-        assert sub == "entertainment"
+    def test_unfolderd_map_is_empty(self):
+        assert UNFOLDERD_ROUTE_MAP == {}, "UNFOLDERD_ROUTE_MAP should be empty (WORLD stream disabled)"
 
 
 class TestAlwaysSkipNames:
