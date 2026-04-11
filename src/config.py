@@ -69,6 +69,7 @@ class Settings(BaseSettings):
 
     # Per-folder story caps (triage Lambda fetch budget per folder)
     ai_ml_research_max_stories: int = 40
+    ai_ml_primary_max_stories: int = 20
     ai_ml_community_max_stories: int = 100
     world_news_max_stories: int = 50
     world_science_max_stories: int = 30

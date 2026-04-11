@@ -94,6 +94,9 @@ def _build_folder_configs(folder_map: dict, settings: Settings) -> list[FolderCo
         elif folder_name == "AI-ML-Community":
             max_s = settings.ai_ml_community_max_stories
             min_s = global_min
+        elif folder_name == "AI-ML-Primary":
+            max_s = settings.ai_ml_primary_max_stories
+            min_s = 0  # primary sources (lab blogs, newsletters): no trained NB score
         else:
             max_s = 40
             min_s = global_min

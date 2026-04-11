@@ -33,6 +33,13 @@ class TestUnfolderdRouteMap:
         assert UNFOLDERD_ROUTE_MAP == {}, "UNFOLDERD_ROUTE_MAP should be empty (WORLD stream disabled)"
 
 
+class TestAIMLPrimaryFolder:
+    def test_ai_ml_primary_routes_to_research(self):
+        route, sub = FOLDER_ROUTE_MAP["AI-ML-Primary"]
+        assert route == Route.AI_ML
+        assert sub == "research"
+
+
 class TestAlwaysSkipNames:
     def test_raindrop_feed_in_skip(self):
         assert "AI / Raindrop.io" in ALWAYS_SKIP_NAMES

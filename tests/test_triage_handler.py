@@ -33,6 +33,7 @@ def _default_settings():
     s.dry_run = "false"
     # Per-folder caps
     s.ai_ml_research_max_stories = 40
+    s.ai_ml_primary_max_stories = 20
     s.ai_ml_community_max_stories = 25
     s.general_tech_max_stories = 40
     s.ai_ml_research_min_score = 0
@@ -243,6 +244,28 @@ def test_hn_velocity_high_adds_boost_tag(
 
     call_args = mock_staging_cls.return_value.store_story.call_args[0][0]
     assert "velocity:hn-high" in call_args["boost_tags"]
+
+
+def test_ai_ml_primary_folder_uses_zero_min_score():
+    """AI-ML-Primary should use min_score=0 (lab blogs have no trained NB intelligence score)."""
+    from src.handlers.triage_handler import _build_folder_configs, FolderConfig
+
+    settings = _default_settings()
+    settings.ai_ml_primary_max_stories = 20
+    settings.ai_ml_research_min_score = 0
+
+    folder_map = {
+        "AI-ML-Research": [111],
+        "AI-ML-Primary": [222],
+        "AI-ML-Community": [333],
+    }
+    configs = _build_folder_configs(folder_map, settings)
+
+    primary_cfg = next((c for c in configs if c.folder_name == "AI-ML-Primary"), None)
+    assert primary_cfg is not None, "AI-ML-Primary should produce a FolderConfig"
+    assert primary_cfg.min_score == 0
+    assert primary_cfg.max_stories == 20
+    assert primary_cfg.route.value == "AI_ML"
 
 
 def test_hn_velocity_failure_does_not_raise():
