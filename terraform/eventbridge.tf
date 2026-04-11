@@ -1,11 +1,11 @@
 # terraform/eventbridge.tf
-# 11:00 UTC = 6AM CDT (summer) / 5AM CST (winter) — acceptable drift for a news briefing
-# 23:00 UTC = 6PM CDT (summer) / 5PM CST (winter)
+# Single weekday run at 13:00 UTC = 8 AM CDT / 7 AM CST
+# Monday override (hours_back=74) is handled in code, not here.
 
 resource "aws_cloudwatch_event_rule" "morning_triage" {
   name                = "personal-journalist-morning"
-  description         = "Trigger Lambda 1 triage at 6AM CDT / 5AM CST"
-  schedule_expression = "cron(0 11 * * ? *)"
+  description         = "Trigger triage Lambda weekdays at 13:00 UTC (8 AM CDT)"
+  schedule_expression = "cron(0 13 ? * MON-FRI *)"
   state               = "ENABLED"
 
   tags = {
@@ -17,9 +17,9 @@ resource "aws_cloudwatch_event_rule" "morning_triage" {
 
 resource "aws_cloudwatch_event_rule" "evening_triage" {
   name                = "personal-journalist-evening"
-  description         = "Trigger Lambda 1 triage at 6PM CDT / 5PM CST"
+  description         = "DISABLED — kept as rollback lever; re-enable to restore PM run"
   schedule_expression = "cron(0 23 * * ? *)"
-  state               = "ENABLED"
+  state               = "DISABLED"
 
   tags = {
     Project     = "research-agent"

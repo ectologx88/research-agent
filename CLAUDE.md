@@ -1,8 +1,9 @@
 # research-agent — Personal Journalist Engine
 
 ## What This Is
-A dual-stream AI-powered briefing system for Seth. Runs twice daily (11:00/23:00 UTC)
-via EventBridge.
+A single-stream AI/ML briefing pipeline for Seth. Runs once daily (13:00 UTC, weekdays only)
+via EventBridge. Publishes only when ≥5 stories pass Haiku scoring (adaptive quality gate).
+Monday runs use hours_back=74 to cover the weekend arXiv gap.
 
 ## The Two Publications
 - **The AI Abstract** — Public intelligence brief for technically literate readers across
@@ -28,7 +29,7 @@ Lambda 1 (Triage, no LLM) → Lambda 2 (Haiku editorial filter) → Lambda 3 (So
 - Feed routing lives in `config/feed_rules.py` — update without redeploy
 - `DRY_RUN=true` for zero-cost testing | `DRY_RUN=writes_only` for real LLM, no writes
 - Raindrop rate limit: `threading.Semaphore(5)` in Lambda 2, 200ms sleep in Lambda 1
-- Lambda 2 bails if fewer than 3 stories pass threshold — no briefing-queue message
+- Lambda 2 bails if fewer than 5 stories pass threshold — no briefing-queue message
 - Recursive Briefing posts to website as private page (category="World", token-gated) + Raindrop
 - `ContextLoader.format_context_block()` must be called (not `json.dumps()`) — the Zeitgeist
   persona expects `[SYSTEM_CONTEXT_BLOCK]` marker format, not raw JSON
@@ -71,3 +72,21 @@ Source field: `feed_name` is always empty from NewsBlur river endpoint, so
 ## Cost Target
 ~$50/month (Anthropic Bedrock + AWS + Raindrop Pro)
 Alert threshold: $3/day via CloudWatch alarm
+
+---
+
+## Dev Prerequisites
+Install dev tools before running quality gates:
+```bash
+pip install ruff pytest
+```
+
+## Quality Gates
+- Build command: echo "no build step"
+- Test command: pytest
+- Lint command: ruff check .
+
+## Architecture Invariants
+- Always set `Config(read_timeout=580)` on bedrock-runtime client — never use default timeout
+- Lambda handlers must have explicit error boundaries — never let exceptions propagate silently to SQS
+- Use `DRY_RUN=true` for zero-cost testing; `DRY_RUN=writes_only` for real LLM, no writes

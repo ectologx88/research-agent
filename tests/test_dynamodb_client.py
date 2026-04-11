@@ -95,6 +95,38 @@ class TestStoryStaging:
         with pytest.raises(ValueError, match="valid DynamoDB"):
             client.update_status("h1", "AI_ML", "summarized", **{"bad-field": "value"})
 
+    def test_store_story_ttl_is_36_hours(self):
+        """story-staging TTL must be 36h to survive a suppressed day into the next run."""
+        import time
+        from unittest.mock import MagicMock
+        from shared.dynamodb_client import StoryStaging
+
+        table = MagicMock()
+        staging = StoryStaging(table)
+
+        before = int(time.time())
+        staging.store_story({
+            "story_hash": "h1",
+            "briefing_type": "AI_ML",
+            "title": "Test",
+            "url": "https://example.com",
+            "content": "body",
+            "feed_name": "",
+            "sub_bucket": "research",
+            "boost_tags": [],
+            "cluster_size": 0,
+            "cluster_key": "",
+            "context_block": "{}",
+            "raindrop_id": None,
+        })
+        after = int(time.time())
+
+        item = table.put_item.call_args[1]["Item"]
+        expected_min = before + 36 * 3600
+        expected_max = after + 36 * 3600
+        assert expected_min <= item["ttl"] <= expected_max, \
+            f"TTL {item['ttl']} not in expected 36h range [{expected_min}, {expected_max}]"
+
 
 class TestSignalTracker:
     def _client(self):

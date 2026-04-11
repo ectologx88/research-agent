@@ -94,15 +94,9 @@ def _build_folder_configs(folder_map: dict, settings: Settings) -> list[FolderCo
         elif folder_name == "AI-ML-Community":
             max_s = settings.ai_ml_community_max_stories
             min_s = global_min
-        elif folder_name in ("Current Events & World", "Weather"):
-            max_s = settings.world_news_max_stories
-            min_s = global_min
-        elif folder_name == "World-Science":
-            max_s = settings.world_science_max_stories
-            min_s = 0
-        elif folder_name == "World-Tech":
-            max_s = settings.world_tech_max_stories
-            min_s = global_min
+        elif folder_name == "AI-ML-Primary":
+            max_s = settings.ai_ml_primary_max_stories
+            min_s = 0  # primary sources (lab blogs, newsletters): no trained NB score
         else:
             max_s = 40
             min_s = global_min
@@ -155,7 +149,7 @@ def _route_story(story, cfg: FolderConfig) -> tuple | None:
         # General-Tech: per-story keyword routing
         if _has_ai_ml_keyword(story.story_title or ""):
             return story, Route.AI_ML, "research"
-        return story, Route.WORLD, "tech"
+        return None  # Non-AI/ML General-Tech stories dropped (WORLD stream disabled)
 
     return story, cfg.route, cfg.sub_bucket
 
@@ -184,6 +178,8 @@ def lambda_handler(event, context):
     execution_id = str(uuid.uuid4())
     settings = Settings()
     dry_run = settings.dry_run != "false"
+    run_time = utcnow()
+    hours_back = 74 if run_time.weekday() == 0 else settings.newsblur_hours_back
     log("INFO", "triage_pipeline.start", execution_id=execution_id, dry_run=dry_run)
 
     newsblur = NewsBlurClient(settings.newsblur_username, settings.newsblur_password)
@@ -221,7 +217,7 @@ def lambda_handler(event, context):
 
         with ThreadPoolExecutor(max_workers=len(folder_configs) or 1) as executor:
             futures = {
-                executor.submit(_fetch_folder, newsblur, cfg, settings.newsblur_hours_back): cfg
+                executor.submit(_fetch_folder, newsblur, cfg, hours_back): cfg
                 for cfg in folder_configs
             }
             for future in as_completed(futures):
@@ -247,7 +243,7 @@ def lambda_handler(event, context):
                     feed_ids=unfolderd_ids,
                     min_score=settings.newsblur_min_score,
                     max_results=20,
-                    hours_back=settings.newsblur_hours_back,
+                    hours_back=hours_back,
                 )
                 elapsed_ms = int((time.time() - t0) * 1000)
                 log("INFO", "newsblur.folder_fetch_complete",
@@ -264,7 +260,7 @@ def lambda_handler(event, context):
         stories = newsblur.fetch_unread_stories(
             min_score=settings.newsblur_min_score,
             max_results=settings.max_stories_per_run,
-            hours_back=settings.newsblur_hours_back,
+            hours_back=hours_back,
         )
         log("INFO", "newsblur.fetch.complete",
             elapsed_ms=int((time.time() - _t0) * 1000), count=len(stories))
@@ -276,8 +272,7 @@ def lambda_handler(event, context):
                 continue
             if _has_ai_ml_keyword(story.story_title or ""):
                 all_routed.append((story, Route.AI_ML, "research"))
-            else:
-                all_routed.append((story, Route.WORLD, "news"))
+            # Non-AI/ML stories in global fallback are dropped (WORLD stream disabled)
 
     # 4. Deduplicate by story_hash (keep first occurrence)
     seen_hashes: set[str] = set()
@@ -287,41 +282,32 @@ def lambda_handler(event, context):
             seen_hashes.add(story.story_hash)
             deduped.append((story, route, sub_bucket))
 
-    # 5. Split into ai_ml and world streams
+    # 5. Route to AI_ML stream only (WORLD stream disabled)
     ai_ml_stories: list[tuple] = []
-    world_stories: list[tuple] = []
-    skip_count = skip_name_count  # start with ALWAYS_SKIP_NAMES drops
+    skip_count = skip_name_count
 
     for story, route, sub_bucket in deduped:
         if route == Route.SKIP:
             skip_count += 1
         elif route == Route.AI_ML:
             ai_ml_stories.append((story, sub_bucket))
-        else:
-            world_stories.append((story, sub_bucket))
 
-    log("INFO", "triage.routed",
-        ai_ml=len(ai_ml_stories), world=len(world_stories), skipped=skip_count)
+    log("INFO", "triage.routed", ai_ml=len(ai_ml_stories), skipped=skip_count)
 
     # 6. Velocity clustering on all routed stories
-    routed_stories = [s for s, _ in ai_ml_stories + world_stories]
+    routed_stories = [s for s, _ in ai_ml_stories]
     cluster_map = compute_clusters(routed_stories)
 
     # 7. Deduplicate and process each stream
-    run_time = utcnow()
     time_of_day = "AM" if run_time.hour < 18 else "PM"
     date_str = run_time.strftime("%Y-%m-%d")
     briefing_date = f"{date_str}-{time_of_day}"
 
-    raindrop_aiml = raindrop_world = None
+    raindrop_aiml = None
     if not dry_run and settings.raindrop_token:
         raindrop_aiml = RaindropClient(
             token=settings.raindrop_token,
             collection_id=settings.raindrop_aiml_collection_id,
-        )
-        raindrop_world = RaindropClient(
-            token=settings.raindrop_token,
-            collection_id=settings.raindrop_world_collection_id,
         )
 
     ai_ml_hashes = _process_stream(
@@ -336,20 +322,7 @@ def lambda_handler(event, context):
         context_block_json=context_block_json,
         dry_run=dry_run,
     )
-    world_hashes = _process_stream(
-        stories=world_stories,
-        briefing_type="WORLD",
-        bucket_name="world",
-        raindrop=raindrop_world,
-        story_staging=story_staging,
-        signal_tracker=signal_tracker,
-        triage=triage,
-        cluster_map=cluster_map,
-        context_block_json=context_block_json,
-        dry_run=dry_run,
-    )
-
-    # 8. Send SQS messages
+    # 8. Send SQS message for AI_ML stream
     if not dry_run:
         if ai_ml_hashes and settings.sqs_aiml_queue_url:
             sqs.send_message(
@@ -361,22 +334,11 @@ def lambda_handler(event, context):
                     "candidate_count": len(ai_ml_hashes),
                 }),
             )
-        if world_hashes and settings.sqs_world_queue_url:
-            sqs.send_message(
-                QueueUrl=settings.sqs_world_queue_url,
-                MessageBody=json.dumps({
-                    "briefing_type": "WORLD",
-                    "briefing_date": briefing_date,
-                    "story_hashes": world_hashes,
-                    "candidate_count": len(world_hashes),
-                }),
-            )
 
     body = {
         "execution_id": execution_id,
         "dry_run": dry_run,
         "ai_ml_count": len(ai_ml_hashes),
-        "world_count": len(world_hashes),
         "skipped_count": skip_count,
     }
     log("INFO", "triage_pipeline.complete", **body)

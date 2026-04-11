@@ -81,27 +81,27 @@ resource "aws_lambda_function" "triage" {
 
   environment {
     variables = {
-      NEWSBLUR_USERNAME              = data.aws_ssm_parameter.newsblur_user.value
-      NEWSBLUR_PASSWORD              = data.aws_ssm_parameter.newsblur_pass.value
-      RAINDROP_TOKEN                 = data.aws_ssm_parameter.raindrop_token.value
-      DYNAMODB_REGION                = "us-east-1"
-      DYNAMODB_STORY_STAGING_TABLE   = aws_dynamodb_table.story_staging.name
-      DYNAMODB_SIGNAL_TABLE          = aws_dynamodb_table.signal_tracker.name
-      FETCH_STRATEGY                 = "hours_back"
-      NEWSBLUR_HOURS_BACK            = "12"
-      MAX_STORIES_PER_RUN            = "150"
-      MARK_AS_READ                   = "false"
-      RAINDROP_AIML_COLLECTION_ID    = data.aws_ssm_parameter.raindrop_aiml_collection_id.value
-      RAINDROP_WORLD_COLLECTION_ID   = data.aws_ssm_parameter.raindrop_world_collection_id.value
-      SQS_AIML_QUEUE_URL             = aws_sqs_queue.ai_ml.url
-      SQS_WORLD_QUEUE_URL            = aws_sqs_queue.world.url
-      AI_ML_RESEARCH_MAX_STORIES     = "40"
-      AI_ML_RESEARCH_MIN_SCORE       = "0"
-      AI_ML_COMMUNITY_MAX_STORIES    = "25"
-      WORLD_NEWS_MAX_STORIES         = "50"
-      WORLD_SCIENCE_MAX_STORIES      = "30"
-      WORLD_TECH_MAX_STORIES         = "25"
-      GENERAL_TECH_MAX_STORIES       = "40"
+      NEWSBLUR_USERNAME            = data.aws_ssm_parameter.newsblur_user.value
+      NEWSBLUR_PASSWORD            = data.aws_ssm_parameter.newsblur_pass.value
+      RAINDROP_TOKEN               = data.aws_ssm_parameter.raindrop_token.value
+      DYNAMODB_REGION              = "us-east-1"
+      DYNAMODB_STORY_STAGING_TABLE = aws_dynamodb_table.story_staging.name
+      DYNAMODB_SIGNAL_TABLE        = aws_dynamodb_table.signal_tracker.name
+      FETCH_STRATEGY               = "hours_back"
+      NEWSBLUR_HOURS_BACK          = "26"
+      MAX_STORIES_PER_RUN          = "150"
+      MARK_AS_READ                 = "false"
+      RAINDROP_AIML_COLLECTION_ID  = data.aws_ssm_parameter.raindrop_aiml_collection_id.value
+      RAINDROP_WORLD_COLLECTION_ID = data.aws_ssm_parameter.raindrop_world_collection_id.value
+      SQS_AIML_QUEUE_URL           = aws_sqs_queue.ai_ml.url
+      SQS_WORLD_QUEUE_URL          = aws_sqs_queue.world.url
+      AI_ML_RESEARCH_MAX_STORIES   = "40"
+      AI_ML_RESEARCH_MIN_SCORE     = "0"
+      AI_ML_COMMUNITY_MAX_STORIES  = "100"
+      WORLD_NEWS_MAX_STORIES       = "50"
+      WORLD_SCIENCE_MAX_STORIES    = "30"
+      WORLD_TECH_MAX_STORIES       = "25"
+      GENERAL_TECH_MAX_STORIES     = "60"
     }
   }
 
@@ -133,16 +133,16 @@ resource "aws_lambda_function" "summarizer" {
 
   environment {
     variables = {
-      RAINDROP_TOKEN                 = data.aws_ssm_parameter.raindrop_token.value
-      RAINDROP_AIML_COLLECTION_ID    = data.aws_ssm_parameter.raindrop_aiml_collection_id.value
-      RAINDROP_WORLD_COLLECTION_ID   = data.aws_ssm_parameter.raindrop_world_collection_id.value
-      DYNAMODB_REGION                = "us-east-1"
-      DYNAMODB_STORY_STAGING_TABLE   = aws_dynamodb_table.story_staging.name
-      BEDROCK_REGION                 = "us-east-1"
-      BEDROCK_SUMMARIZER_MODEL_ID    = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-      SQS_BRIEFING_QUEUE_URL         = aws_sqs_queue.briefing.url
-      NEWSBLUR_USERNAME              = data.aws_ssm_parameter.newsblur_user.value
-      NEWSBLUR_PASSWORD              = data.aws_ssm_parameter.newsblur_pass.value
+      RAINDROP_TOKEN               = data.aws_ssm_parameter.raindrop_token.value
+      RAINDROP_AIML_COLLECTION_ID  = data.aws_ssm_parameter.raindrop_aiml_collection_id.value
+      RAINDROP_WORLD_COLLECTION_ID = data.aws_ssm_parameter.raindrop_world_collection_id.value
+      DYNAMODB_REGION              = "us-east-1"
+      DYNAMODB_STORY_STAGING_TABLE = aws_dynamodb_table.story_staging.name
+      BEDROCK_REGION               = "us-east-1"
+      BEDROCK_SUMMARIZER_MODEL_ID  = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      SQS_BRIEFING_QUEUE_URL       = aws_sqs_queue.briefing.url
+      NEWSBLUR_USERNAME            = data.aws_ssm_parameter.newsblur_user.value
+      NEWSBLUR_PASSWORD            = data.aws_ssm_parameter.newsblur_pass.value
     }
   }
 
@@ -174,17 +174,17 @@ resource "aws_lambda_function" "briefing" {
 
   environment {
     variables = {
-      RAINDROP_TOKEN               = data.aws_ssm_parameter.raindrop_token.value
-      RAINDROP_PERSONAL_BRIEF_ID   = data.aws_ssm_parameter.raindrop_personal_brief_id.value
-      SITE_URL                     = data.aws_ssm_parameter.site_url.value
-      BRIEF_API_KEY                = data.aws_ssm_parameter.brief_api_key.value
-      DYNAMODB_REGION              = "us-east-1"
-      DYNAMODB_SIGNAL_TABLE        = aws_dynamodb_table.signal_tracker.name
-      DYNAMODB_BRIEFING_TABLE      = aws_dynamodb_table.briefing_archive.name
-      BEDROCK_REGION               = "us-east-1"
-      BEDROCK_BRIEFING_MODEL_ID    = "us.anthropic.claude-sonnet-4-6"
-      TELEGRAM_BOT_TOKEN           = data.aws_ssm_parameter.telegram_bot_token.value
-      TELEGRAM_CHAT_ID             = data.aws_ssm_parameter.telegram_chat_id.value
+      RAINDROP_TOKEN             = data.aws_ssm_parameter.raindrop_token.value
+      RAINDROP_PERSONAL_BRIEF_ID = data.aws_ssm_parameter.raindrop_personal_brief_id.value
+      SITE_URL                   = data.aws_ssm_parameter.site_url.value
+      BRIEF_API_KEY              = data.aws_ssm_parameter.brief_api_key.value
+      DYNAMODB_REGION            = "us-east-1"
+      DYNAMODB_SIGNAL_TABLE      = aws_dynamodb_table.signal_tracker.name
+      DYNAMODB_BRIEFING_TABLE    = aws_dynamodb_table.briefing_archive.name
+      BEDROCK_REGION             = "us-east-1"
+      BEDROCK_BRIEFING_MODEL_ID  = "us.anthropic.claude-sonnet-4-6"
+      TELEGRAM_BOT_TOKEN         = data.aws_ssm_parameter.telegram_bot_token.value
+      TELEGRAM_CHAT_ID           = data.aws_ssm_parameter.telegram_chat_id.value
     }
   }
 

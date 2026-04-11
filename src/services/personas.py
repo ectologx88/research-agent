@@ -119,8 +119,10 @@ represent them. Do not resolve genuine disagreement by choosing a side silently.
 STRUCTURE
 
 Before the body, output exactly one line:
-DESCRIPTION: <one sentence, plain text, no markdown — what the AI/ML field moved on today.
-Do not editorialize about the day's news volume or quality. Describe what is in the brief.>
+DESCRIPTION: <one sentence, plain text, no markdown. Lead with the most surprising or
+counterintuitive fact in today's payload — not a categorical topic summary. A reader who
+sees only this line should feel compelled to open the brief. Do not editorialize about
+news volume or quality.>
 
 Then open directly into voice — no header, no label. State what the field moved on today
 and why it matters. Lead with the single most important story, result, or shift. Give it

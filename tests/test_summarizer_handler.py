@@ -77,16 +77,16 @@ def test_passes_stories_sent_to_briefing_queue(
     mock_raindrop_cls, mock_nb_cls,
 ):
     mock_settings_cls.return_value = _default_settings()
-    items = [_make_item(f"h{i}") for i in range(3)]
+    items = [_make_item(f"h{i}") for i in range(5)]
     mock_staging_cls.return_value.batch_get_stories.return_value = items
     mock_scorer_cls.return_value.score.return_value = _pass_result()
     mock_raindrop_cls.return_value.update_bookmark.return_value = {}
 
-    resp = handler_mod.lambda_handler(_sqs_event(hashes=["h0", "h1", "h2"]), {})
+    resp = handler_mod.lambda_handler(_sqs_event(hashes=[f"h{i}" for i in range(5)]), {})
 
     assert resp["statusCode"] == 200
-    assert resp["body"]["passed"] == 3
-    assert resp["body"]["sent_to_briefing"] == 3
+    assert resp["body"]["passed"] == 5
+    assert resp["body"]["sent_to_briefing"] == 5
     sqs_mock = mock_boto3.client.return_value
     assert sqs_mock.send_message.called
     body = json.loads(sqs_mock.send_message.call_args[1]["MessageBody"])
@@ -102,13 +102,13 @@ def test_passes_stories_sent_to_briefing_queue(
 @patch("src.handlers.summarizer_handler.StoryStaging")
 @patch("src.handlers.summarizer_handler.boto3")
 @patch("src.handlers.summarizer_handler.Settings")
-def test_fewer_than_3_pass_sends_thin_briefing(
+def test_fewer_than_threshold_suppresses_edition(
     mock_settings_cls, mock_boto3, mock_staging_cls, mock_scorer_cls,
     mock_raindrop_cls, mock_nb_cls,
 ):
-    """Fewer than 3 passing stories should still produce a briefing (thin_briefing path)."""
+    """Fewer than MIN_STORIES_FOR_BRIEFING passing stories → suppressed, no SQS send."""
     mock_settings_cls.return_value = _default_settings()
-    # 5 stories, only h0 and h2 pass (2 total — thin briefing)
+    # 5 stories, only h0 and h2 pass (2 total — below threshold of 5)
     items = [_make_item(f"h{i}") for i in range(5)]
     mock_staging_cls.return_value.batch_get_stories.return_value = items
 
@@ -120,8 +120,8 @@ def test_fewer_than_3_pass_sends_thin_briefing(
     resp = handler_mod.lambda_handler(_sqs_event(hashes=[f"h{i}" for i in range(5)]), {})
 
     assert resp["body"]["passed"] == 2
-    assert resp["body"]["sent_to_briefing"] == 2  # always send if any pass
-    mock_boto3.client.return_value.send_message.assert_called_once()
+    assert resp["body"]["sent_to_briefing"] == 0  # suppressed — 2 < MIN_STORIES_FOR_BRIEFING (5)
+    mock_boto3.client.return_value.send_message.assert_not_called()
 
 
 @patch("src.handlers.summarizer_handler.NewsBlurClient")
@@ -201,3 +201,59 @@ def test_raindrop_update_called_for_passing_stories(
     handler_mod.lambda_handler(_sqs_event(hashes=["h0", "h1", "h2"]), {})
 
     assert mock_raindrop_cls.return_value.update_bookmark.call_count == 3
+
+
+@patch("src.handlers.summarizer_handler.Settings")
+@patch("src.handlers.summarizer_handler.boto3")
+@patch("src.handlers.summarizer_handler.EditorialScorer")
+@patch("src.handlers.summarizer_handler.StoryStaging")
+def test_suppresses_edition_when_below_threshold(mock_staging, mock_scorer_cls,
+                                                  mock_boto3, mock_settings_cls):
+    """When fewer than MIN_STORIES_FOR_BRIEFING pass, no SQS message is sent."""
+    settings = _default_settings()
+    mock_settings_cls.return_value = settings
+
+    # Return 4 pending items (below threshold of 5)
+    items = [_make_item(f"h{i}") for i in range(4)]
+    mock_staging.return_value.batch_get_stories.return_value = items
+
+    scorer = MagicMock()
+    scorer.score.return_value = _pass_result()
+    mock_scorer_cls.return_value = scorer
+
+    sqs_mock = MagicMock()
+    mock_boto3.client.return_value = sqs_mock
+    mock_boto3.resource.return_value = MagicMock()
+
+    result = handler_mod.lambda_handler(_sqs_event(hashes=[f"h{i}" for i in range(4)]), None)
+
+    sqs_mock.send_message.assert_not_called()
+    assert result["body"]["sent_to_briefing"] == 0
+
+
+@patch("src.handlers.summarizer_handler.Settings")
+@patch("src.handlers.summarizer_handler.boto3")
+@patch("src.handlers.summarizer_handler.EditorialScorer")
+@patch("src.handlers.summarizer_handler.StoryStaging")
+def test_publishes_edition_at_threshold(mock_staging, mock_scorer_cls,
+                                         mock_boto3, mock_settings_cls):
+    """When exactly MIN_STORIES_FOR_BRIEFING pass, SQS message IS sent."""
+    settings = _default_settings()
+    mock_settings_cls.return_value = settings
+
+    # Return 5 pending items (exactly at threshold)
+    items = [_make_item(f"h{i}") for i in range(5)]
+    mock_staging.return_value.batch_get_stories.return_value = items
+
+    scorer = MagicMock()
+    scorer.score.return_value = _pass_result()
+    mock_scorer_cls.return_value = scorer
+
+    sqs_mock = MagicMock()
+    mock_boto3.client.return_value = sqs_mock
+    mock_boto3.resource.return_value = MagicMock()
+
+    result = handler_mod.lambda_handler(_sqs_event(hashes=[f"h{i}" for i in range(5)]), None)
+
+    sqs_mock.send_message.assert_called_once()
+    assert result["body"]["sent_to_briefing"] == 5

@@ -38,7 +38,7 @@ class StoryStaging:
             **data,
             "status": "pending",
             "created_at": _now_iso(),
-            "ttl": _ttl(24 * 3600),
+            "ttl": _ttl(36 * 3600),  # 36h: survives one suppressed day into the next run
         }
         self._table.put_item(Item=item)
 
