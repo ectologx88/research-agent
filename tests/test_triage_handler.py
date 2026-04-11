@@ -29,16 +29,11 @@ def _default_settings():
     s.dynamodb_signal_table = "signal-tracker"
     s.raindrop_token = "tok"
     s.raindrop_aiml_collection_id = 11
-    s.raindrop_world_collection_id = 22
     s.sqs_aiml_queue_url = "https://sqs/aiml"
-    s.sqs_world_queue_url = "https://sqs/world"
     s.dry_run = "false"
     # Per-folder caps
     s.ai_ml_research_max_stories = 40
     s.ai_ml_community_max_stories = 25
-    s.world_news_max_stories = 50
-    s.world_science_max_stories = 30
-    s.world_tech_max_stories = 25
     s.general_tech_max_stories = 40
     s.ai_ml_research_min_score = 0
     return s
@@ -77,7 +72,7 @@ def test_routes_aiml_story_to_aiml_collection(
 
     assert resp["statusCode"] == 200
     assert resp["body"]["ai_ml_count"] == 1
-    assert resp["body"]["world_count"] == 0
+    assert "world_count" not in resp["body"]
     mock_staging_cls.return_value.store_story.assert_called_once()
 
 
@@ -258,3 +253,28 @@ def test_hn_velocity_failure_does_not_raise():
         from src.handlers.triage_handler import _check_hn_velocity
         result = _check_hn_velocity("https://example.com/story")
     assert result == 0
+
+
+@patch("src.handlers.triage_handler.ContextLoader")
+@patch("src.handlers.triage_handler.boto3")
+@patch("src.handlers.triage_handler.RaindropClient")
+@patch("src.handlers.triage_handler.StoryStaging")
+@patch("src.handlers.triage_handler.SignalTracker")
+@patch("src.handlers.triage_handler.Settings")
+@patch("src.handlers.triage_handler.NewsBlurClient")
+def test_response_has_no_world_count(mock_nb_cls, mock_settings_cls, mock_signal,
+                                      mock_staging, mock_raindrop, mock_boto3, mock_ctx):
+    settings = _default_settings()
+    mock_settings_cls.return_value = settings
+    nb = MagicMock()
+    nb.get_feeds_by_folder.return_value = {"AI-ML-Research": [123], "": []}
+    nb.fetch_unread_stories.return_value = []
+    mock_nb_cls.return_value = nb
+    mock_ctx.return_value.fetch_all.return_value = {}
+    mock_ctx.return_value.format_context_block.return_value = "{}"
+    mock_staging.return_value.check_duplicate.return_value = False
+
+    from src.handlers.triage_handler import lambda_handler
+    result = lambda_handler({}, None)
+
+    assert "world_count" not in result["body"]

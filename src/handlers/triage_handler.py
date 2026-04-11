@@ -94,15 +94,6 @@ def _build_folder_configs(folder_map: dict, settings: Settings) -> list[FolderCo
         elif folder_name == "AI-ML-Community":
             max_s = settings.ai_ml_community_max_stories
             min_s = global_min
-        elif folder_name in ("Current Events & World", "Weather"):
-            max_s = settings.world_news_max_stories
-            min_s = global_min
-        elif folder_name == "World-Science":
-            max_s = settings.world_science_max_stories
-            min_s = 0
-        elif folder_name == "World-Tech":
-            max_s = settings.world_tech_max_stories
-            min_s = global_min
         else:
             max_s = 40
             min_s = global_min
@@ -155,7 +146,7 @@ def _route_story(story, cfg: FolderConfig) -> tuple | None:
         # General-Tech: per-story keyword routing
         if _has_ai_ml_keyword(story.story_title or ""):
             return story, Route.AI_ML, "research"
-        return story, Route.WORLD, "tech"
+        return None  # Non-AI/ML General-Tech stories dropped (WORLD stream disabled)
 
     return story, cfg.route, cfg.sub_bucket
 
@@ -276,8 +267,7 @@ def lambda_handler(event, context):
                 continue
             if _has_ai_ml_keyword(story.story_title or ""):
                 all_routed.append((story, Route.AI_ML, "research"))
-            else:
-                all_routed.append((story, Route.WORLD, "news"))
+            # Non-AI/ML stories in global fallback are dropped (WORLD stream disabled)
 
     # 4. Deduplicate by story_hash (keep first occurrence)
     seen_hashes: set[str] = set()
@@ -287,24 +277,20 @@ def lambda_handler(event, context):
             seen_hashes.add(story.story_hash)
             deduped.append((story, route, sub_bucket))
 
-    # 5. Split into ai_ml and world streams
+    # 5. Route to AI_ML stream only (WORLD stream disabled)
     ai_ml_stories: list[tuple] = []
-    world_stories: list[tuple] = []
-    skip_count = skip_name_count  # start with ALWAYS_SKIP_NAMES drops
+    skip_count = skip_name_count
 
     for story, route, sub_bucket in deduped:
         if route == Route.SKIP:
             skip_count += 1
         elif route == Route.AI_ML:
             ai_ml_stories.append((story, sub_bucket))
-        else:
-            world_stories.append((story, sub_bucket))
 
-    log("INFO", "triage.routed",
-        ai_ml=len(ai_ml_stories), world=len(world_stories), skipped=skip_count)
+    log("INFO", "triage.routed", ai_ml=len(ai_ml_stories), skipped=skip_count)
 
     # 6. Velocity clustering on all routed stories
-    routed_stories = [s for s, _ in ai_ml_stories + world_stories]
+    routed_stories = [s for s, _ in ai_ml_stories]
     cluster_map = compute_clusters(routed_stories)
 
     # 7. Deduplicate and process each stream
@@ -313,15 +299,11 @@ def lambda_handler(event, context):
     date_str = run_time.strftime("%Y-%m-%d")
     briefing_date = f"{date_str}-{time_of_day}"
 
-    raindrop_aiml = raindrop_world = None
+    raindrop_aiml = None
     if not dry_run and settings.raindrop_token:
         raindrop_aiml = RaindropClient(
             token=settings.raindrop_token,
             collection_id=settings.raindrop_aiml_collection_id,
-        )
-        raindrop_world = RaindropClient(
-            token=settings.raindrop_token,
-            collection_id=settings.raindrop_world_collection_id,
         )
 
     ai_ml_hashes = _process_stream(
@@ -336,20 +318,7 @@ def lambda_handler(event, context):
         context_block_json=context_block_json,
         dry_run=dry_run,
     )
-    world_hashes = _process_stream(
-        stories=world_stories,
-        briefing_type="WORLD",
-        bucket_name="world",
-        raindrop=raindrop_world,
-        story_staging=story_staging,
-        signal_tracker=signal_tracker,
-        triage=triage,
-        cluster_map=cluster_map,
-        context_block_json=context_block_json,
-        dry_run=dry_run,
-    )
-
-    # 8. Send SQS messages
+    # 8. Send SQS message for AI_ML stream
     if not dry_run:
         if ai_ml_hashes and settings.sqs_aiml_queue_url:
             sqs.send_message(
@@ -361,22 +330,11 @@ def lambda_handler(event, context):
                     "candidate_count": len(ai_ml_hashes),
                 }),
             )
-        if world_hashes and settings.sqs_world_queue_url:
-            sqs.send_message(
-                QueueUrl=settings.sqs_world_queue_url,
-                MessageBody=json.dumps({
-                    "briefing_type": "WORLD",
-                    "briefing_date": briefing_date,
-                    "story_hashes": world_hashes,
-                    "candidate_count": len(world_hashes),
-                }),
-            )
 
     body = {
         "execution_id": execution_id,
         "dry_run": dry_run,
         "ai_ml_count": len(ai_ml_hashes),
-        "world_count": len(world_hashes),
         "skipped_count": skip_count,
     }
     log("INFO", "triage_pipeline.complete", **body)
