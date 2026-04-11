@@ -79,4 +79,4 @@ class Settings(BaseSettings):
     # AI-ML-Research uses 0: arXiv papers have no trained intelligence rules (score=0 is normal)
     ai_ml_research_min_score: int = 0
 
-    newsblur_hours_back: int = 12
+    newsblur_hours_back: int = 26

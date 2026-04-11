@@ -175,6 +175,8 @@ def lambda_handler(event, context):
     execution_id = str(uuid.uuid4())
     settings = Settings()
     dry_run = settings.dry_run != "false"
+    run_time = utcnow()
+    hours_back = 74 if run_time.weekday() == 0 else settings.newsblur_hours_back
     log("INFO", "triage_pipeline.start", execution_id=execution_id, dry_run=dry_run)
 
     newsblur = NewsBlurClient(settings.newsblur_username, settings.newsblur_password)
@@ -212,7 +214,7 @@ def lambda_handler(event, context):
 
         with ThreadPoolExecutor(max_workers=len(folder_configs) or 1) as executor:
             futures = {
-                executor.submit(_fetch_folder, newsblur, cfg, settings.newsblur_hours_back): cfg
+                executor.submit(_fetch_folder, newsblur, cfg, hours_back): cfg
                 for cfg in folder_configs
             }
             for future in as_completed(futures):
@@ -238,7 +240,7 @@ def lambda_handler(event, context):
                     feed_ids=unfolderd_ids,
                     min_score=settings.newsblur_min_score,
                     max_results=20,
-                    hours_back=settings.newsblur_hours_back,
+                    hours_back=hours_back,
                 )
                 elapsed_ms = int((time.time() - t0) * 1000)
                 log("INFO", "newsblur.folder_fetch_complete",
@@ -255,7 +257,7 @@ def lambda_handler(event, context):
         stories = newsblur.fetch_unread_stories(
             min_score=settings.newsblur_min_score,
             max_results=settings.max_stories_per_run,
-            hours_back=settings.newsblur_hours_back,
+            hours_back=hours_back,
         )
         log("INFO", "newsblur.fetch.complete",
             elapsed_ms=int((time.time() - _t0) * 1000), count=len(stories))
@@ -294,7 +296,6 @@ def lambda_handler(event, context):
     cluster_map = compute_clusters(routed_stories)
 
     # 7. Deduplicate and process each stream
-    run_time = utcnow()
     time_of_day = "AM" if run_time.hour < 18 else "PM"
     date_str = run_time.strftime("%Y-%m-%d")
     briefing_date = f"{date_str}-{time_of_day}"

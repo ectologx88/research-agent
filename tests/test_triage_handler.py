@@ -278,3 +278,74 @@ def test_response_has_no_world_count(mock_nb_cls, mock_settings_cls, mock_signal
     result = lambda_handler({}, None)
 
     assert "world_count" not in result["body"]
+
+
+@patch("src.handlers.triage_handler.utcnow")
+@patch("src.handlers.triage_handler.ContextLoader")
+@patch("src.handlers.triage_handler.boto3")
+@patch("src.handlers.triage_handler.RaindropClient")
+@patch("src.handlers.triage_handler.StoryStaging")
+@patch("src.handlers.triage_handler.SignalTracker")
+@patch("src.handlers.triage_handler.Settings")
+@patch("src.handlers.triage_handler.NewsBlurClient")
+def test_monday_fetch_uses_74_hours_back(mock_nb_cls, mock_settings_cls, mock_signal,
+                                          mock_staging, mock_raindrop, mock_boto3,
+                                          mock_ctx, mock_utcnow):
+    from datetime import datetime, timezone
+    # 2026-04-13 is a Monday
+    mock_utcnow.return_value = datetime(2026, 4, 13, 13, 0, 0, tzinfo=timezone.utc)
+
+    settings = _default_settings()
+    settings.newsblur_hours_back = 26
+    mock_settings_cls.return_value = settings
+
+    nb = MagicMock()
+    nb.get_feeds_by_folder.return_value = {"AI-ML-Research": [123], "": []}
+    nb.fetch_unread_stories.return_value = []
+    mock_nb_cls.return_value = nb
+    mock_ctx.return_value.fetch_all.return_value = {}
+    mock_ctx.return_value.format_context_block.return_value = "{}"
+    mock_staging.return_value.check_duplicate.return_value = False
+
+    from src.handlers.triage_handler import lambda_handler
+    lambda_handler({}, None)
+
+    # All fetch_unread_stories calls should use hours_back=74 on Monday
+    for call in nb.fetch_unread_stories.call_args_list:
+        assert call.kwargs.get("hours_back") == 74, \
+            f"Expected hours_back=74 on Monday, got {call.kwargs.get('hours_back')}"
+
+
+@patch("src.handlers.triage_handler.utcnow")
+@patch("src.handlers.triage_handler.ContextLoader")
+@patch("src.handlers.triage_handler.boto3")
+@patch("src.handlers.triage_handler.RaindropClient")
+@patch("src.handlers.triage_handler.StoryStaging")
+@patch("src.handlers.triage_handler.SignalTracker")
+@patch("src.handlers.triage_handler.Settings")
+@patch("src.handlers.triage_handler.NewsBlurClient")
+def test_tuesday_fetch_uses_default_hours_back(mock_nb_cls, mock_settings_cls, mock_signal,
+                                                mock_staging, mock_raindrop, mock_boto3,
+                                                mock_ctx, mock_utcnow):
+    from datetime import datetime, timezone
+    # 2026-04-14 is a Tuesday
+    mock_utcnow.return_value = datetime(2026, 4, 14, 13, 0, 0, tzinfo=timezone.utc)
+
+    settings = _default_settings()
+    settings.newsblur_hours_back = 26
+    mock_settings_cls.return_value = settings
+
+    nb = MagicMock()
+    nb.get_feeds_by_folder.return_value = {"AI-ML-Research": [123], "": []}
+    nb.fetch_unread_stories.return_value = []
+    mock_nb_cls.return_value = nb
+    mock_ctx.return_value.fetch_all.return_value = {}
+    mock_ctx.return_value.format_context_block.return_value = "{}"
+    mock_staging.return_value.check_duplicate.return_value = False
+
+    from src.handlers.triage_handler import lambda_handler
+    lambda_handler({}, None)
+
+    for call in nb.fetch_unread_stories.call_args_list:
+        assert call.kwargs.get("hours_back") == 26, \
+            f"Expected hours_back=26 on Tuesday, got {call.kwargs.get('hours_back')}"
