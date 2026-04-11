@@ -164,14 +164,10 @@ def lambda_handler(event, context):
     )
     passed_stories = passed_stories[:briefing_cap]
 
-    # Send to briefing queue — always brief if at least one story passed.
-    # Log thin_briefing warning when below preferred minimum so it's visible in metrics.
+    # Adaptive quality gate: suppress edition if fewer than MIN_STORIES_FOR_BRIEFING pass.
+    # This avoids Sonnet calls on genuinely thin days — stories accumulate for next run.
     sent = 0
-    PREFERRED_MIN = 3
-    if len(passed_stories) > 0 and do_writes:
-        if 0 < len(passed_stories) < PREFERRED_MIN:
-            log("WARNING", "summarizer.thin_briefing",
-                passed=len(passed_stories), preferred_min=PREFERRED_MIN)
+    if len(passed_stories) >= MIN_STORIES_FOR_BRIEFING and do_writes:
         if settings.sqs_briefing_queue_url:
             sqs.send_message(
                 QueueUrl=settings.sqs_briefing_queue_url,
@@ -188,6 +184,11 @@ def lambda_handler(event, context):
                 passed=len(passed_stories), briefing_type=briefing_type)
     elif len(passed_stories) == 0:
         log("INFO", "summarizer.bail_no_stories", briefing_type=briefing_type)
+    else:
+        log("INFO", "summarizer.suppressed",
+            briefing_type=briefing_type,
+            passed=len(passed_stories),
+            threshold=MIN_STORIES_FOR_BRIEFING)
 
     body = {
         "briefing_type": briefing_type,

@@ -10,7 +10,7 @@ Threshold history:
 
 AI_ML_PASS_THRESHOLD = 9    # out of 15
 WORLD_PASS_THRESHOLD = 7    # out of 15 — kept for reference; WORLD stream disabled
-MIN_STORIES_FOR_BRIEFING = 1  # will be set to 5 in Task 6 (suppression gate)
+MIN_STORIES_FOR_BRIEFING = 5  # suppress edition entirely if below this threshold
 MAX_AI_ML_STORIES = 40      # triage cap — how many candidates to score
 MAX_WORLD_STORIES = 20      # triage cap — WORLD stream disabled; kept for reference
 MAX_BRIEFING_AI_ML_STORIES = 10  # top-N by score sent to briefing Lambda
