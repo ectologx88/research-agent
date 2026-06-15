@@ -2,9 +2,14 @@
 
 ## Status
 
-Pre-brainstorming. This PRD captures the full scope discussed so far so it can be
-decomposed into GitHub issues with explicit blocker/dependency relationships and
-brainstormed/built incrementally, sub-project by sub-project. Tracking issue: #21.
+Pre-brainstorming, revised. An adversarial review of the initial draft (logged
+2026-06-15, see section 1.5) found the original 4-sub-project graph plan
+conflated a cheap/urgent fix with an expensive/speculative one and proposed
+starting with the expensive one. This revision sequences the work as three
+phases (section 2) — verify, precompute `source_tier`, extend
+`SignalTracker` for lineage — with the full graph deferred to section 4.
+Tracking issue: #21 (covers the deferred section 4 only; Phases 0-2 need new
+issues).
 
 ---
 
@@ -144,134 +149,168 @@ Spot-checked specific numeric/factual claims across the 18-brief corpus.
   unsourced invented comparators, and any analytics-flavored number not tied to
   a cited/queryable source.
 
-### 1.5 What these four reviews establish together
+### 1.5 What these four reviews establish together — and what they don't
 
 1. The **cluster/signal-tracking mechanism is real differentiated value**
-   (1.2, 1.3) but its outputs are **partially or wholly LLM-generated rather
-   than queried** (1.4's open question) — i.e., the exact failure mode PR #20
-   already fixed for *timeframe phrasing* likely recurs for *cluster counts and
-   narrative continuity claims* generally.
+   (1.2, 1.3) — `SignalTracker.upsert()` maintains a real, queried
+   `mention_count`, not an LLM-generated number. PR #20 already fixed the
+   *phrasing* of that count (`coverage_phrase`). **The 1.4 "is the cluster
+   count itself real or invented?" question has not been independently
+   verified against post-PR#20 output** — the 305-vs-14 discrepancy it cites
+   is plausibly explained by different `signal_key` granularities (a broad
+   "language" cluster vs. a narrow "model" cluster), not fabrication. This
+   needs a direct check before it can justify further work.
 2. **Narrative lineage/callback** ("third time CDER has touched this," "since
    February") is independently identified by both the regulatory-affairs
    persona (1.3, as a *strength to keep*) and the research analyst (1.4, as a
-   *risk if ungrounded*) — it's valuable precisely because it's the kind of
-   claim that's expensive to get wrong.
-3. The Erdős/Gowers claim (1.4) is the sharpest illustration of why **claim
-   provenance matters**: a claim sourced to secondhand tech press, presented
-   with the same confidence as a cited arXiv preprint, with no mechanism to
-   later confirm/refute/retract it if it turns out to be wrong.
+   *risk if ungrounded*). This is the one finding that genuinely requires
+   something beyond a flat mention-counter.
+3. **The Erdős/Gowers claim (1.4) is the highest-severity finding in the
+   entire review**, and it is a **source-tier / confidence-framing problem at
+   generation time**, not a tracking problem. A claim sourced to secondhand
+   tech press (no arXiv ID) was presented with the same declarative
+   confidence as a cited preprint. A graph that tracks claim lineage over
+   *future* briefs would only catch this indirectly, slowly, if a later brief
+   happens to contradict it — it does nothing for the day the claim is first
+   published with unwarranted confidence.
 
-PR #20 (`coverage_phrase`, merged) already fixed the narrowest instance of
-problem #1 — LLM-invented *timeframe phrasing* for `signal_tracker` data. It
-was explicitly scoped as a stopgap (see
-`docs/superpowers/specs/2026-06-15-signal-age-framing-design.md`). This PRD is
-about the general case: **replacing `signal_tracker`'s mention-counter with a
-knowledge graph that gives the briefing pipeline real, queryable provenance for
-topics, clusters, and claims** — so that "X times since Y," "this is the Nth
-time," and "this contradicts/confirms what we said before" are all grounded
-facts the LLM is instructed to use verbatim, not text it generates.
+**Revised framing:** the original draft of this PRD proposed a single
+4-stage knowledge-graph project as the answer to all three points above. An
+adversarial review of *this PRD* (logged 2026-06-15) found that conflates a
+cheap, urgent, well-precedented fix (point 3, and a verification step for
+point 1) with an expensive, more speculative project (point 2) — and proposed
+starting with the expensive one. This PRD now sequences the work so the
+cheap/urgent fixes ship first, using the same precompute-and-instruct-verbatim
+pattern as PR #20, and treats the full knowledge graph as a deferred
+follow-on scoped down to only what point 2 actually requires.
 
 ---
 
-## 2. Vision: claim tracking with resolution status
+## 2. Revised plan: verify, then precompute, then extend — graph deferred
 
-A seasoned journalist in this space knows what's already been written. New
-coverage of a topic calls back to the original: what was claimed, what's
-changed, what's panned out. `signal_tracker`'s mention-counter cannot do this —
-it has no concept of:
+Three phases, each independently shippable, in priority order:
 
-- **Entity-level dedup across reframing** — recognizing two differently-worded
-  stories are about the same underlying topic/entity/paper, beyond same-day
-  token-overlap clustering (`velocity.py`).
-- **Narrative lineage** — "we covered this on [date], here's what's changed
-  since."
-- **Claim tracking with resolution status** — a story claims "X will happen by
-  Y"; a later story confirms/refutes/updates that claim. Requires claim
-  extraction (LLM-assisted), entity linking, and a resolution-status field
-  surfaced to the briefing LLM the same way `coverage_phrase` surfaces timing
-  today (precomputed, verbatim-use instruction — same pattern as PR #20).
+### Phase 0 — Verify the cluster-count claim (point 1)
+
+Before building anything: check actual recent `signal_tracker` data and
+post-PR#20 brief output to confirm whether `mention_count`/`coverage_phrase`
+are being surfaced correctly, and whether the 305-vs-14 style discrepancies
+are explained by `signal_key` granularity (expected) or are still evidence of
+LLM-invented numbers (would mean PR #20 didn't fully close this class of bug).
+This is investigation, not a code change — output is either "confirmed fine,
+no further action" or "found a residual instance of the PR #20 failure mode,
+fix it the same way."
+
+### Phase 1 — `source_tier` precompute (point 3, highest severity)
+
+Directly addresses the Erdős/Gowers-class finding, the most dangerous one in
+the corpus. Same pattern as PR #20 (`_annotate_signal_age` /
+`coverage_phrase`): a pure helper computes a `source_tier` field per story —
+e.g. `arxiv` (has an arXiv ID / from a known-arXiv feed) vs. `secondary`
+(tech press, blogs, no paper artifact) — and the persona prompts
+(`src/services/personas.py`) are instructed to hedge claims tagged
+`secondary` (e.g. "reported by [outlet], not yet independently verified")
+rather than stating them with the same confidence as `arxiv`-tier claims.
+No new infrastructure, no LLM-based extraction — `source_tier` is derived
+from existing story metadata (URL/feed origin, presence of an arXiv ID),
+the same kind of deterministic computation `_annotate_signal_age` already
+does for timing.
+
+**This phase is the direct, low-cost answer to the PRD's original
+motivating finding** and does not depend on Phase 2 or any graph work.
+
+### Phase 2 — Narrative-lineage extension to `SignalTracker` (point 2)
+
+The only point that needs more than a flat counter. Scoped down from "graph
+storage layer + claim extraction + entity linking + resolution lifecycle" to
+a minimal extension of the existing `SignalTracker` table:
+
+- Add `linked_story_hashes` (list) to each `signal_key` item — appends the
+  hash/identifier of each story that contributed to this signal, reusing
+  `signal_key` as the entity-dedup key (it's already produced by `velocity.py`'s
+  clustering, so no new entity-linking step is needed).
+- Add `last_framing` (string) — a short precomputed summary of what was said
+  last time this `signal_key` was covered (e.g. derived from the prior
+  brief's text for that cluster), surfaced to the LLM the same way
+  `coverage_phrase` is: verbatim/lightly-adapted, not recomputed.
+
+This gets most of the "third time CDER has touched this, here's what's
+changed" value without LLM-based claim extraction, similarity matching, or a
+resolution-status lifecycle — all of which remain unimplemented and are
+addressed only in section 4 (deferred).
 
 ---
 
 ## 3. Technology decision
 
-**Recommendation: DynamoDB adjacency-list pattern.**
+No new infrastructure is needed for Phases 0-2 — all are extensions of
+`SignalTracker` (`shared/dynamodb_client.py`) and the persona prompts
+(`src/services/personas.py`), following the PR #20 pattern.
+
+The original technology evaluation (DynamoDB adjacency-list vs. Neo4j AuraDB
+vs. Neptune vs. Kuzu) remains relevant **only if** the deferred work in
+section 4 is picked up later:
 
 | Option | Verdict |
 |---|---|
 | Amazon Neptune (Serverless) | Ruled out — doesn't scale to zero, exceeds ~$50/month budget. |
 | Neo4j AuraDB (free tier) | Viable but introduces a new external managed service (auth, latency, Lambda cold-start considerations). |
-| **DynamoDB adjacency-list** | **Recommended.** No new infrastructure — direct evolution of `SignalTracker`'s existing table/access patterns. Handles 1-2 hop lookups well (topic → related claims, claim → resolution status). Multi-hop traversal requires multiple round-trips. No native vector/similarity search — would need in-process embedding cosine-sim or a separate vector store for claim-similarity matching. |
-| Kuzu (embedded "DuckDB for graphs") | Single-file embedded DB (`data.kz`) persisted to S3, loaded into Lambda `/tmp`. Native Cypher + vector indices in one engine — relevant for claim-similarity matching. **Untested:** whether the `kuzu` Python wheel runs in the Lambda Python runtime without a custom layer (~30-45 min spike against `public.ecr.aws/lambda/python:3.13`). |
+| DynamoDB adjacency-list | Recommended if a real graph is needed — no new infrastructure, direct evolution of `SignalTracker`'s patterns. Handles 1-2 hop lookups well. No native vector/similarity search. |
+| Kuzu (embedded "DuckDB for graphs") | Single-file embedded DB persisted to S3/Lambda `/tmp`. Native Cypher + vector indices — relevant if claim-similarity matching is ever built. **Untested** in Lambda runtime (~30-45 min spike needed). |
 
-Decision: proceed with the DynamoDB adjacency-list as the working assumption.
-The Kuzu spike remains an open item under #21 if multi-hop/similarity needs
-outgrow DynamoDB later — not a blocker for starting.
+This decision is deferred along with section 4 — not needed for Phases 0-2.
 
 ---
 
-## 4. Scope decomposition
+## 4. Deferred: full claim-tracking knowledge graph (not started)
 
-The full vision is too large for a single spec/plan cycle. It decomposes into
-four sequential sub-projects, each independently buildable and testable:
+The original 4-sub-project graph concept is preserved here as a scoped-down
+follow-on, to be revisited **only if Phase 2's `SignalTracker` extension
+proves insufficient** for narrative-lineage needs (e.g. if `last_framing`
+text summaries turn out too lossy and genuine claim-level confirm/refute
+tracking is wanted).
 
-### 4.1 Sub-project 1 — Graph storage layer (recommended starting point)
+- **Claim extraction** — LLM-assisted extraction of discrete, checkable
+  claims (e.g. "X predicts Y by Z") from story content, each tagged with
+  source story, `source_tier` (Phase 1), and a resolution-status initialized
+  to `open`. **Open risk, unresolved:** an extraction LLM is subject to the
+  same fabrication/over-precision failure mode the adversarial review
+  diagnosed in the source pipeline (point 3) — it could preserve or compound
+  fabricated precision, or extract a well-formed claim from a fabricated
+  sentence, giving the fabrication a persistent tracked identity. Any future
+  design here must either scope extraction to structurally-derivable claims
+  (paper title + benchmark number + arXiv ID already present in metadata, not
+  LLM-synthesized) or explicitly bound extraction reliability to the source
+  pipeline's ceiling.
+- **Entity linking / claim matching** — beyond `signal_key`-level dedup
+  (already handled by `velocity.py` + Phase 2), matching claims across
+  reframings via similarity search. This is the point at which DynamoDB's
+  lack of native vector search becomes a real constraint (see section 3) —
+  any storage-layer design here must account for this from the start, not
+  discover it after the schema is fixed.
+- **Resolution-status lifecycle + briefing integration** — open → confirmed /
+  refuted / evolved transitions, surfaced via a precomputed field, same
+  verbatim-use pattern as `coverage_phrase` and Phase 1's `source_tier`.
 
-Replace/extend `SignalTracker`'s DynamoDB table with an adjacency-list schema
-capable of representing entities, topics, and edges between them (e.g.
-`topic --mentioned_in--> story`, `claim --about--> entity`). Provides the
-read/write primitives (`get_node`, `get_edges`, `upsert_node`, `upsert_edge`)
-that all later sub-projects build on. No claim extraction or LLM involvement
-yet — this is the data-layer foundation, directly analogous to today's
-`shared/dynamodb_client.py`.
-
-**Blocks:** 4.2, 4.3, 4.4 (all require the storage layer to exist).
-
-### 4.2 Sub-project 2 — Claim extraction
-
-LLM-assisted extraction of discrete, checkable claims from story content
-(e.g. "X predicts Y by Z," "Model A achieves N% on benchmark B"). Writes
-extracted claims as nodes into the graph from 4.1, each tagged with source
-story, extraction confidence, and a resolution-status field initialized to
-`open`.
-
-**Blocked by:** 4.1. **Blocks:** 4.3, 4.4.
-
-### 4.3 Sub-project 3 — Entity linking / claim matching
-
-Given a newly extracted claim (4.2), determine whether it relates to an
-existing entity/claim already in the graph (entity-level dedup across
-reframing — same underlying topic, different wording). Establishes the
-narrative-lineage edges ("this story is a follow-up to claim X from
-[date]").
-
-**Blocked by:** 4.1, 4.2. **Blocks:** 4.4.
-
-### 4.4 Sub-project 4 — Resolution-status lifecycle + briefing integration
-
-Resolution-status transitions (open → confirmed / refuted / evolved) based on
-linked follow-up claims (4.3), and surfacing this to the briefing LLM via a
-precomputed field — same pattern as `coverage_phrase` from PR #20: the LLM is
-instructed to use the precomputed status/lineage phrase verbatim rather than
-inferring its own narrative continuity.
-
-**Blocked by:** 4.1, 4.2, 4.3.
+If picked up, this would need its own `superpowers:brainstorming` cycle,
+including the storage-layer/access-pattern design called out above —
+not started until Phases 0-2 are complete and a gap is confirmed.
 
 ---
 
 ## 5. Relationship to existing work
 
-- PR #20 (merged, `feature/signal-age-framing`) fixed the narrowest instance of
-  the "LLM invents framing instead of using real data" failure mode, for
-  `signal_tracker`'s timeframe phrasing only. Pattern (precompute → instruct
-  verbatim use) is the template for 4.4.
+- PR #20 (merged, `feature/signal-age-framing`) established the
+  precompute-and-instruct-verbatim pattern (`_annotate_signal_age` /
+  `coverage_phrase`) that Phase 1 (`source_tier`) and Phase 2
+  (`last_framing`) both reuse directly.
 - Issue #21 ("Knowledge graph for topic/claim provenance (replace
-  signal_tracker)") is the original tracking issue for this whole effort; this
-  PRD supersedes its scope description and should be referenced from the
-  decomposed issues created from section 4.
-- `signal_tracker` (`shared/dynamodb_client.py`'s `SignalTracker`) remains in
-  place and unchanged until 4.1 is built and proven; no "rip and replace"
-  before then.
+  signal_tracker)") is the original tracking issue for the full-graph idea;
+  this PRD's section 4 supersedes its scope description as the deferred
+  follow-on. Phases 0-2 should be tracked as new, separate issues (not under
+  #21, since they don't require or lead to replacing `signal_tracker`).
+- `signal_tracker` (`shared/dynamodb_client.py`'s `SignalTracker`) is
+  **extended, not replaced**, by Phase 2. No "rip and replace" is planned.
 
 ---
 
@@ -279,24 +318,28 @@ inferring its own narrative continuity.
 
 - A separate ingestion layer for non-arXiv source types (regulatory filings,
   Federal Register, etc.) — raised by the biotech persona (1.3) as a
-  *different pipeline*, not part of this knowledge-graph effort.
+  *different pipeline*, not part of this effort.
 - A parallel zero-jargon "translated" digest product — raised by the
-  marketing/SEO review (1.2) as a content/positioning fix, independent of the
-  knowledge-graph/claim-tracking data layer.
+  marketing/SEO review (1.2) as a content/positioning fix, independent of
+  signal-tracking/lineage work.
 - General citation-verification/confidence-flagging UI surfaced to readers
-  (1.3's "dealbreaker") — the claim-tracking graph in section 4 is a
-  *prerequisite* for this (it gives claims a verifiable identity/lineage to
-  attach a confidence/verification flag to), but building the
-  reader-facing flagging UI itself is separate follow-on work.
+  (1.3's "dealbreaker") — Phase 1's `source_tier` hedging is a step toward
+  this (claims get a confidence framing at generation time) but a
+  reader-facing verification UI/mechanism is separate follow-on work, not
+  addressed by Phases 0-2 or section 4.
 
 ---
 
 ## 7. Next steps
 
 1. User review of this PRD.
-2. Decompose section 4 into GitHub issues (one per sub-project), with explicit
-   `blocked by` / `blocks` links matching the dependency chain in 4.1 → 4.2 →
-   4.3 → 4.4, and cross-reference #21.
-3. `superpowers:brainstorming` for sub-project 4.1 (graph storage layer) as the
-   first buildable unit, producing its own spec under
-   `docs/superpowers/specs/`.
+2. Phase 0: verify the cluster-count claim against real `signal_tracker` /
+   brief output — investigation only, no code change unless a residual PR #20
+   failure mode is found.
+3. `superpowers:brainstorming` for Phase 1 (`source_tier` precompute +
+   persona prompt hedging) — small, well-precedented, can start immediately
+   after Phase 0 regardless of its outcome.
+4. `superpowers:brainstorming` for Phase 2 (`SignalTracker` lineage
+   extension) after Phase 1 ships.
+5. Section 4 (full graph) remains unscheduled — revisit only if Phase 2 proves
+   insufficient.
