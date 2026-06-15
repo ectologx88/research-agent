@@ -218,6 +218,14 @@ def build_equalizer_prompt(
     if signals:
         parts.append("\n\n## WEAK SIGNALS (from signal_tracker — use exactly this data)\n")
         parts.append(_dumps(signals))
+        parts.append(
+            "\n\nFor each signal, use its `coverage_phrase` field verbatim (or "
+            "lightly adapted to fit the sentence grammatically) to describe how "
+            "long this topic has been recurring. Do not compute or estimate a "
+            "timeframe from `first_seen`/`last_seen` yourself, and do not state "
+            "a different mention count or time unit than what `coverage_phrase` "
+            "provides.\n"
+        )
 
     if prior_briefing:
         parts.append("\n\n## PRIOR EDITION (for trend continuity)\n")
@@ -246,6 +254,14 @@ def build_zeitgeist_prompt(
     if signals:
         parts.append("\n\n## WEAK SIGNALS\n")
         parts.append(_dumps(signals))
+        parts.append(
+            "\n\nFor each signal, use its `coverage_phrase` field verbatim (or "
+            "lightly adapted to fit the sentence grammatically) to describe how "
+            "long this topic has been recurring. Do not compute or estimate a "
+            "timeframe from `first_seen`/`last_seen` yourself, and do not state "
+            "a different mention count or time unit than what `coverage_phrase` "
+            "provides.\n"
+        )
 
     if prior_briefing:
         parts.append("\n\n## PRIOR EDITION (for trend continuity)\n")
