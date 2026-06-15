@@ -6,8 +6,16 @@ Pre-brainstorming, revised. An adversarial review of the initial draft (logged
 2026-06-15, see section 1.5) found the original 4-sub-project graph plan
 conflated a cheap/urgent fix with an expensive/speculative one and proposed
 starting with the expensive one. This revision sequences the work as three
-phases (section 2) — verify, precompute `source_tier`, extend
-`SignalTracker` for lineage — with the full graph deferred to section 4.
+phases (section 2) — verify, precompute `source_tier`, extend lineage
+tracking — with the full graph deferred to section 4.
+
+**Phase 0 is complete (2026-06-15)**: `mention_count`/`coverage_phrase` are
+confirmed real and queried (no fabrication) — but Phase 0 also found that
+`signal_key` is a single generic keyword token, not a topic/entity, which
+invalidates Phase 2's original "extend `SignalTracker` by `signal_key`"
+premise. Phase 2 needs re-scoping (see section 2) before it can be
+brainstormed. Phase 1 is unaffected and ready to brainstorm now.
+
 Tracking issue: #21 (covers the deferred section 4 only; Phases 0-2 need new
 issues).
 
@@ -190,16 +198,43 @@ follow-on scoped down to only what point 2 actually requires.
 
 Three phases, each independently shippable, in priority order:
 
-### Phase 0 — Verify the cluster-count claim (point 1)
+### Phase 0 — Verify the cluster-count claim (point 1) — COMPLETE (2026-06-15)
 
-Before building anything: check actual recent `signal_tracker` data and
-post-PR#20 brief output to confirm whether `mention_count`/`coverage_phrase`
-are being surfaced correctly, and whether the 305-vs-14 style discrepancies
-are explained by `signal_key` granularity (expected) or are still evidence of
-LLM-invented numbers (would mean PR #20 didn't fully close this class of bug).
-This is investigation, not a code change — output is either "confirmed fine,
-no further action" or "found a residual instance of the PR #20 failure mode,
-fix it the same way."
+**Finding: `mention_count` is real and queried, not fabricated — but
+`signal_key` granularity is too coarse to support Phase 2 as originally
+scoped.**
+
+Scanned the live `signal-tracker` table (29 items). Confirmed:
+
+- `signal_key: "language"`, `mention_count: 385`, `first_seen:
+  2026-02-19`. This directly corroborates the "385/305 mentions since
+  February" claim from 1.4 — the discrepancy between the review's "305" and
+  the current "385" is just the counter continuing to increment between scans.
+  **`mention_count` is a real `update_item` counter (`SignalTracker.upsert`),
+  not LLM-generated.** Point 1's fabrication concern is resolved: no further
+  action needed on `coverage_phrase`/`mention_count` itself.
+
+- However, every `signal_key` in the table is a **single generic token**:
+  `language`, `models`, `multi`, `agents`, `anthropic`, `agent`, `large`,
+  `google`, `evaluation`, `benchmark`, etc. This is by design —
+  `velocity.py::compute_clusters` sets `cluster_key` to "the most frequent
+  shared token (≥4 chars) across same-day title overlaps," and
+  `signal_tracker` is keyed on that token directly (`triage_handler.py`).
+  `"language"` appears in 385 unrelated stories about completely different
+  topics — it is a keyword-frequency counter, not a topic/entity identifier.
+
+**Implication for Phase 2 (section 2 below):** Phase 2 as originally written
+assumed `signal_key` already functions as "the entity-dedup key... produced by
+velocity.py's clustering," and proposed attaching `linked_story_hashes` /
+`last_framing` to it. Given `signal_key` is a single shared keyword, not an
+entity, a `last_framing` field on `signal_key: "language"` would read as "the
+word 'language' was used in a story 3 days ago" — not "third time CDER has
+touched biosimilar interchangeability standards this month," which is the
+actual narrative-lineage need from 1.3/1.4. **Phase 2 needs a different
+entity/topic key than `signal_key` before it can deliver the stated value —
+this should be the first question in Phase 2's brainstorming, not assumed.**
+This is not a blocker for Phase 1 (`source_tier`, point 3), which is
+independent of `signal_key` entirely.
 
 ### Phase 1 — `source_tier` precompute (point 3, highest severity)
 
@@ -219,25 +254,41 @@ does for timing.
 **This phase is the direct, low-cost answer to the PRD's original
 motivating finding** and does not depend on Phase 2 or any graph work.
 
-### Phase 2 — Narrative-lineage extension to `SignalTracker` (point 2)
+### Phase 2 — Narrative-lineage extension (point 2) — NEEDS RE-SCOPING
 
-The only point that needs more than a flat counter. Scoped down from "graph
-storage layer + claim extraction + entity linking + resolution lifecycle" to
-a minimal extension of the existing `SignalTracker` table:
+The only point that needs more than a flat counter. Originally scoped down
+from "graph storage layer + claim extraction + entity linking + resolution
+lifecycle" to a minimal extension of `SignalTracker`
+(`linked_story_hashes` + `last_framing` per `signal_key`), reusing
+`signal_key` as the entity-dedup key.
 
-- Add `linked_story_hashes` (list) to each `signal_key` item — appends the
-  hash/identifier of each story that contributed to this signal, reusing
-  `signal_key` as the entity-dedup key (it's already produced by `velocity.py`'s
-  clustering, so no new entity-linking step is needed).
-- Add `last_framing` (string) — a short precomputed summary of what was said
-  last time this `signal_key` was covered (e.g. derived from the prior
-  brief's text for that cluster), surfaced to the LLM the same way
-  `coverage_phrase` is: verbatim/lightly-adapted, not recomputed.
+**Phase 0 invalidated this premise**: `signal_key` is a single shared keyword
+token (`"language"`, `"models"`, `"agent"`) produced by
+`velocity.py::compute_clusters`, not a topic/entity identifier — 385 stories
+about unrelated subjects all share `signal_key: "language"`. Attaching
+`last_framing` to that key would not produce "third time CDER touched
+biosimilar interchangeability standards this month"; it would produce
+"the word 'language' appeared 3 days ago," which is not the value 1.3/1.4
+described.
 
-This gets most of the "third time CDER has touched this, here's what's
-changed" value without LLM-based claim extraction, similarity matching, or a
-resolution-status lifecycle — all of which remain unimplemented and are
-addressed only in section 4 (deferred).
+**Before this phase can be brainstormed, it needs a different question
+answered first:** what *is* the right entity/topic key for narrative lineage,
+if not `signal_key`? Candidates to evaluate in that brainstorming session —
+not decided here:
+
+- A coarser per-story identifier (e.g. the story's own cluster of titles from
+  `velocity.py`, before reducing to a single shared token) — cheap, still no
+  new infra, but may still be too noisy day-to-day.
+- A small, explicit allowlist of tracked entities (e.g. specific labs, model
+  families, paper IDs) maintained alongside `config/keywords.py` — narrower
+  but matches how `AI_ML_KEYWORDS` is already curated by hand.
+- Something closer to the original section 4 "entity linking" — deferred
+  unless the above are insufficient.
+
+This phase should not start with "extend `SignalTracker`'s schema" as its
+first design decision (as originally written) — it should start with "what
+is the entity key," which may or may not end up being a `SignalTracker`
+extension at all.
 
 ---
 
@@ -333,13 +384,17 @@ not started until Phases 0-2 are complete and a gap is confirmed.
 ## 7. Next steps
 
 1. User review of this PRD.
-2. Phase 0: verify the cluster-count claim against real `signal_tracker` /
-   brief output — investigation only, no code change unless a residual PR #20
-   failure mode is found.
+2. ~~Phase 0: verify the cluster-count claim against real `signal_tracker` /
+   brief output.~~ **Complete (2026-06-15)** — see section 2, Phase 0.
+   `mention_count`/`coverage_phrase` confirmed real; `signal_key` confirmed
+   to be a single generic token, which invalidates Phase 2's original premise
+   (see item 4 below).
 3. `superpowers:brainstorming` for Phase 1 (`source_tier` precompute +
-   persona prompt hedging) — small, well-precedented, can start immediately
-   after Phase 0 regardless of its outcome.
-4. `superpowers:brainstorming` for Phase 2 (`SignalTracker` lineage
-   extension) after Phase 1 ships.
+   persona prompt hedging) — small, well-precedented, independent of Phase 2's
+   re-scoping. This is the immediate next action.
+4. `superpowers:brainstorming` for Phase 2 — must first resolve "what is the
+   right entity/topic key for narrative lineage, if not `signal_key`" (see
+   section 2, Phase 2, NEEDS RE-SCOPING) before any `SignalTracker`-extension
+   design can proceed. Can happen after Phase 1 ships.
 5. Section 4 (full graph) remains unscheduled — revisit only if Phase 2 proves
    insufficient.
