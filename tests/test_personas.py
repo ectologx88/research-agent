@@ -106,6 +106,13 @@ class TestZeitgeistPrompt:
         )
         assert "evidence trail" in prompt.lower() or "links are" in prompt.lower()
 
+    def test_source_tier_secondary_instruction_present(self):
+        prompt = build_zeitgeist_prompt(
+            stories=[], signals=[], prior_briefing=None, context_block=""
+        )
+        assert "[no arXiv artifact]" in prompt
+        assert 'source_tier == "secondary"' in prompt
+
 
 class TestEqualizerJournalisticStandards:
     def test_meta_transition_ban_instruction_present(self):
@@ -126,6 +133,11 @@ class TestEqualizerJournalisticStandards:
         prompt = build_equalizer_prompt(stories=[], signals=[], prior_briefing=None)
         assert "cluster_size" in prompt
         assert "integrity" in prompt
+
+    def test_source_tier_secondary_instruction_present(self):
+        prompt = build_equalizer_prompt(stories=[], signals=[], prior_briefing=None)
+        assert "[no arXiv artifact]" in prompt
+        assert 'source_tier == "secondary"' in prompt
 
 
 class TestScorerHardGates:

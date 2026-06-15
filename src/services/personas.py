@@ -25,6 +25,19 @@ SOURCE_EMOJI: dict[str, str] = {
     "single-source": "⚠️",
 }
 
+_SOURCE_TIER_INSTRUCTION = (
+    '`source_tier == "secondary"`: this story has no arXiv-citable artifact. '
+    "When linking this story inline on first mention, append the marker "
+    "`[no arXiv artifact]` immediately after the link — this is part of the "
+    "mandatory inline-link rendering, not optional decoration. Additionally, "
+    "attribute extraordinary, quantitative, or surprising claims explicitly to "
+    'the reporting outlet (e.g., "according to [Outlet], not yet corroborated '
+    'by a published paper") rather than stating them as established fact — '
+    "regardless of `integrity` score. Both the marker and the attribution "
+    "framing are independent of and additional to the `integrity <= 2` flag "
+    "and `SOURCE_EMOJI`."
+)
+
 _EQUALIZER_SYSTEM = """\
 You are the editorial AI for "The AI Abstract" — a twice-daily intelligence brief on AI
 and machine learning. Your reader is smart and paying attention but doesn't work in the
@@ -137,11 +150,13 @@ RENDERING RULES
 - Inline links: when a source is referenced in the body, link it on first mention as
   [emoji][Title](url). Do not re-link the same URL. Emoji key: {emoji_table}
 - integrity <= 2: add explicit ⚠️ single-source/unverified flag in body near the story
+- {source_tier_instruction}
 - cluster_size >= 3: this is the lead story — open with it, give it the most space
 - NEVER invent sources or include stories not in the payload
 - NEVER include the context block — it is for Zeitgeist only
 """.format(
-    emoji_table="\n".join(f"  {k} → {v}" for k, v in SOURCE_EMOJI.items())
+    emoji_table="\n".join(f"  {k} → {v}" for k, v in SOURCE_EMOJI.items()),
+    source_tier_instruction=_SOURCE_TIER_INSTRUCTION,
 )
 
 _ZEITGEIST_SYSTEM = """\
@@ -198,9 +213,12 @@ both. Do not silently resolve disagreement by choosing the more dramatic version
 DEPTH: Stories with clear primary-source backing (integrity >= 4) earn more space.
 A geopolitical development with a peer-reviewed or direct-reporting source should
 not receive the same treatment as an aggregated wire summary.
+
+{source_tier_instruction}
 </journalistic_standards>
 """.format(
-    emoji_table=", ".join(f"{k}={v}" for k, v in SOURCE_EMOJI.items())
+    emoji_table=", ".join(f"{k}={v}" for k, v in SOURCE_EMOJI.items()),
+    source_tier_instruction=_SOURCE_TIER_INSTRUCTION,
 )
 
 
