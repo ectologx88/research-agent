@@ -135,6 +135,7 @@ def lambda_handler(event, context):
             "story_hash": story_hash,
             "title": item["title"],
             "url": item.get("url", ""),
+            "source_tier": _compute_source_tier(item.get("url", ""), item.get("content", "")),
             "summary": result.summary,
             "source_type": result.source_type,
             "reasoning": result.reasoning,
