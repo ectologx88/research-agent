@@ -6,6 +6,43 @@ import src.handlers.summarizer_handler as handler_mod
 from src.services.editorial_scorer import ScoringResult
 
 
+def test_compute_source_tier_arxiv_abs_url():
+    assert handler_mod._compute_source_tier(
+        "https://arxiv.org/abs/2606.09894", ""
+    ) == "arxiv"
+
+
+def test_compute_source_tier_arxiv_pdf_url_with_version():
+    assert handler_mod._compute_source_tier(
+        "https://export.arxiv.org/pdf/2606.09894v2", ""
+    ) == "arxiv"
+
+
+def test_compute_source_tier_press_writeup_citing_preprint():
+    assert handler_mod._compute_source_tier(
+        "https://arstechnica.com/science/some-article/",
+        "...researchers say... arXiv:2606.09894 describes the method...",
+    ) == "arxiv"
+
+
+def test_compute_source_tier_erdos_case_no_arxiv_id():
+    assert handler_mod._compute_source_tier(
+        "https://arstechnica.com/science/some-article/",
+        "...OpenAI disproved the Erdős unit distance conjecture, Gowers said...",
+    ) == "secondary"
+
+
+def test_compute_source_tier_empty_inputs():
+    assert handler_mod._compute_source_tier("", "") == "secondary"
+
+
+def test_compute_source_tier_missing_keys_via_get_defaults():
+    item = {}
+    assert handler_mod._compute_source_tier(
+        item.get("url", ""), item.get("content", "")
+    ) == "secondary"
+
+
 def _sqs_event(briefing_type="AI_ML", hashes=("h1",), briefing_date="2026-02-17-AM"):
     body = json.dumps({
         "briefing_type": briefing_type,

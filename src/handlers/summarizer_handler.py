@@ -1,5 +1,6 @@
 """Lambda 2: Editorial scoring, Raindrop note updates, forward to briefing queue."""
 import json
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -16,6 +17,27 @@ from src.clients.newsblur import NewsBlurClient
 from src.clients.raindrop import RaindropClient
 from src.config import Settings
 from src.services.editorial_scorer import EditorialScorer
+
+
+_ARXIV_ID_PATTERN = re.compile(
+    r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5})|arxiv:\s*(\d{4}\.\d{4,5})",
+    re.IGNORECASE,
+)
+
+
+def _compute_source_tier(url: str, content: str) -> str:
+    """Classify a story as "arxiv" or "secondary" based on a citable arXiv artifact.
+
+    Searches both the story's URL and its content for an arXiv URL
+    (arxiv.org/abs/... or arxiv.org/pdf/..., any subdomain, with or without
+    a version suffix) or a bare "arXiv:YYMM.NNNNN" citation in body text.
+    A match anywhere means a citable preprint exists, even if the story's
+    own URL points to a press writeup. No match degrades to "secondary",
+    the more conservative tier.
+    """
+    if _ARXIV_ID_PATTERN.search(f"{url}\n{content}"):
+        return "arxiv"
+    return "secondary"
 
 
 def lambda_handler(event, context):
