@@ -1,9 +1,66 @@
 """Tests for the v2 briefing handler."""
 import json
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import src.handlers.briefing_handler as handler_mod
 
+
+def test_annotate_signal_age_multiple_mentions():
+    now = datetime.now(timezone.utc)
+    first_seen = (now - timedelta(days=12)).isoformat()
+    signals = [{"signal_key": "eval-crisis", "mention_count": 5, "first_seen": first_seen}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "mentioned 5 times over the past 12 days"
+
+
+def test_annotate_signal_age_single_mention():
+    now = datetime.now(timezone.utc)
+    first_seen = (now - timedelta(days=3)).isoformat()
+    signals = [{"signal_key": "open-source", "mention_count": 1, "first_seen": first_seen}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "mentioned once, 3 days ago"
+
+
+def test_annotate_signal_age_first_seen_today():
+    now = datetime.now(timezone.utc)
+    signals = [{"signal_key": "new-topic", "mention_count": 1, "first_seen": now.isoformat()}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "first appeared today"
+
+
+def test_annotate_signal_age_missing_first_seen():
+    signals = [{"signal_key": "no-timestamp", "mention_count": 3}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "first appeared today"
+
+
+def test_annotate_signal_age_malformed_first_seen():
+    signals = [{"signal_key": "bad-timestamp", "mention_count": 3, "first_seen": "not-a-date"}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "first appeared today"
+
+
+def test_annotate_signal_age_empty_list():
+    assert handler_mod._annotate_signal_age([]) == []
+
+
+def test_annotate_signal_age_naive_first_seen():
+    signals = [{"signal_key": "naive-timestamp", "mention_count": 3, "first_seen": "2026-06-03T12:00:00"}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "first appeared today"
 
 
 def test_equalizer_system_has_description_sentinel():
@@ -173,6 +230,32 @@ def test_signals_fetched_from_cluster_keys(
     # get_signals called with deduplicated cluster_keys (2 unique keys)
     call_args = mock_signal_cls.return_value.get_signals.call_args[0][0]
     assert set(call_args) == {"eval-crisis", "open-source"}
+
+
+@patch("src.handlers.briefing_handler.BriefingArchive")
+@patch("src.handlers.briefing_handler.SignalTracker")
+@patch("src.handlers.briefing_handler.BriefingSynthesizer")
+@patch("src.handlers.briefing_handler._post_to_site")
+@patch("src.handlers.briefing_handler.boto3")
+@patch("src.handlers.briefing_handler.Settings")
+def test_signals_annotated_before_synthesis(
+    mock_settings_cls, mock_boto3, mock_post_to_site, mock_synth_cls,
+    mock_signal_cls, mock_archive_cls,
+):
+    mock_settings_cls.return_value = _default_settings()
+    stories = [_make_story("h1", cluster_key="eval-crisis")]
+    mock_synth_cls.return_value.synthesize.return_value = "Briefing."
+    mock_synth_cls.return_value._prior_briefing_key.return_value = ("2026-02-16-PM", "AI_ML")
+    mock_archive_cls.return_value.get_prior.return_value = None
+    mock_signal_cls.return_value.get_signals.return_value = [
+        {"signal_key": "eval-crisis", "mention_count": 5}
+    ]
+
+    handler_mod.lambda_handler(_sqs_event(stories=stories), {})
+
+    _, kwargs = mock_synth_cls.return_value.synthesize.call_args
+    signals_arg = kwargs.get("signals") if "signals" in kwargs else mock_synth_cls.return_value.synthesize.call_args[0][1]
+    assert signals_arg[0]["coverage_phrase"] == "first appeared today"
 
 
 @patch("src.handlers.briefing_handler.BriefingArchive")

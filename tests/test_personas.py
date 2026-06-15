@@ -39,6 +39,13 @@ class TestEqualizerPrompt:
         prompt = build_equalizer_prompt(stories=[], signals=signals, prior_briefing=None)
         assert "eval-crisis" in prompt
 
+    def test_equalizer_prompt_instructs_coverage_phrase_usage(self):
+        signals = [{"signal_key": "eval-crisis", "mention_count": 5,
+                    "coverage_phrase": "mentioned 5 times over the past 12 days"}]
+        prompt = build_equalizer_prompt(stories=[], signals=signals, prior_briefing=None)
+        assert "coverage_phrase" in prompt
+        assert "Do not compute or estimate a timeframe" in prompt
+
     def test_prior_briefing_included_when_present(self):
         prompt = build_equalizer_prompt(
             stories=[], signals=[],
@@ -60,6 +67,13 @@ class TestZeitgeistPrompt:
             stories=[], signals=[], prior_briefing=None, context_block=block
         )
         assert "SYSTEM_CONTEXT_BLOCK" in prompt
+
+    def test_zeitgeist_prompt_instructs_coverage_phrase_usage(self):
+        signals = [{"signal_key": "eval-crisis", "mention_count": 5,
+                    "coverage_phrase": "mentioned 5 times over the past 12 days"}]
+        prompt = build_zeitgeist_prompt(stories=[], signals=signals, prior_briefing=None, context_block="")
+        assert "coverage_phrase" in prompt
+        assert "Do not compute or estimate a timeframe" in prompt
 
     def test_entertainment_aside_instruction_present(self):
         prompt = build_zeitgeist_prompt(
