@@ -35,7 +35,7 @@ def _annotate_signal_age(signals: list[dict]) -> list[dict]:
             try:
                 first_seen_dt = datetime.fromisoformat(first_seen_raw)
                 days_tracked = max((now_utc - first_seen_dt).days, 0)
-            except ValueError:
+            except (ValueError, TypeError):
                 days_tracked = 0
 
         if days_tracked == 0:

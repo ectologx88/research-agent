@@ -55,6 +55,14 @@ def test_annotate_signal_age_empty_list():
     assert handler_mod._annotate_signal_age([]) == []
 
 
+def test_annotate_signal_age_naive_first_seen():
+    signals = [{"signal_key": "naive-timestamp", "mention_count": 3, "first_seen": "2026-06-03T12:00:00"}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "first appeared today"
+
+
 def test_equalizer_system_has_description_sentinel():
     """EQUALIZER prompt must instruct the model to output DESCRIPTION: sentinel."""
     from src.services.personas import _EQUALIZER_SYSTEM
