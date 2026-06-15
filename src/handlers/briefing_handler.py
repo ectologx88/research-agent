@@ -4,6 +4,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 
 import boto3
 from botocore.config import Config
@@ -13,6 +14,40 @@ from shared.logger import log
 from src.clients.raindrop import RaindropAuthError, RaindropClient
 from src.config import Settings
 from src.services.synthesizer import BriefingSynthesizer
+
+
+def _annotate_signal_age(signals: list[dict]) -> list[dict]:
+    """Attach a precomputed `coverage_phrase` to each signal dict.
+
+    Computes the phrase from `mention_count` and `first_seen` so the LLM
+    never has to do date arithmetic or invent a timeframe unit. Missing or
+    unparseable `first_seen` degrades to "first appeared today" — signal
+    tracking is best-effort, this must never raise.
+    """
+    now_utc = datetime.now(timezone.utc)
+
+    for signal in signals:
+        mention_count = signal.get("mention_count", 0)
+        first_seen_raw = signal.get("first_seen")
+
+        days_tracked = 0
+        if first_seen_raw:
+            try:
+                first_seen_dt = datetime.fromisoformat(first_seen_raw)
+                days_tracked = max((now_utc - first_seen_dt).days, 0)
+            except ValueError:
+                days_tracked = 0
+
+        if days_tracked == 0:
+            coverage_phrase = "first appeared today"
+        elif mention_count == 1:
+            coverage_phrase = f"mentioned once, {days_tracked} days ago"
+        else:
+            coverage_phrase = f"mentioned {mention_count} times over the past {days_tracked} days"
+
+        signal["coverage_phrase"] = coverage_phrase
+
+    return signals
 
 
 def _briefing_date_to_iso(briefing_date: str) -> str:

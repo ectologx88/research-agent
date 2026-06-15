@@ -1,9 +1,58 @@
 """Tests for the v2 briefing handler."""
 import json
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import src.handlers.briefing_handler as handler_mod
 
+
+def test_annotate_signal_age_multiple_mentions():
+    now = datetime.now(timezone.utc)
+    first_seen = (now - timedelta(days=12)).isoformat()
+    signals = [{"signal_key": "eval-crisis", "mention_count": 5, "first_seen": first_seen}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "mentioned 5 times over the past 12 days"
+
+
+def test_annotate_signal_age_single_mention():
+    now = datetime.now(timezone.utc)
+    first_seen = (now - timedelta(days=3)).isoformat()
+    signals = [{"signal_key": "open-source", "mention_count": 1, "first_seen": first_seen}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "mentioned once, 3 days ago"
+
+
+def test_annotate_signal_age_first_seen_today():
+    now = datetime.now(timezone.utc)
+    signals = [{"signal_key": "new-topic", "mention_count": 1, "first_seen": now.isoformat()}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "first appeared today"
+
+
+def test_annotate_signal_age_missing_first_seen():
+    signals = [{"signal_key": "no-timestamp", "mention_count": 3}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "first appeared today"
+
+
+def test_annotate_signal_age_malformed_first_seen():
+    signals = [{"signal_key": "bad-timestamp", "mention_count": 3, "first_seen": "not-a-date"}]
+
+    result = handler_mod._annotate_signal_age(signals)
+
+    assert result[0]["coverage_phrase"] == "first appeared today"
+
+
+def test_annotate_signal_age_empty_list():
+    assert handler_mod._annotate_signal_age([]) == []
 
 
 def test_equalizer_system_has_description_sentinel():
