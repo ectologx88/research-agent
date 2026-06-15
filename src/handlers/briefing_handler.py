@@ -273,6 +273,7 @@ def lambda_handler(event, context):
     # Query signals for cluster_keys in this batch (deduplicated)
     cluster_keys = list({s["cluster_key"] for s in stories if s.get("cluster_key")})
     signals = signal_tracker.get_signals(cluster_keys) if cluster_keys else []
+    signals = _annotate_signal_age(signals)
 
     # Context block: WORLD briefings only (from first story's context_block field)
     context_block = ""

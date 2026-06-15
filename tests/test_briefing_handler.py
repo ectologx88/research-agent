@@ -238,6 +238,32 @@ def test_signals_fetched_from_cluster_keys(
 @patch("src.handlers.briefing_handler._post_to_site")
 @patch("src.handlers.briefing_handler.boto3")
 @patch("src.handlers.briefing_handler.Settings")
+def test_signals_annotated_before_synthesis(
+    mock_settings_cls, mock_boto3, mock_post_to_site, mock_synth_cls,
+    mock_signal_cls, mock_archive_cls,
+):
+    mock_settings_cls.return_value = _default_settings()
+    stories = [_make_story("h1", cluster_key="eval-crisis")]
+    mock_synth_cls.return_value.synthesize.return_value = "Briefing."
+    mock_synth_cls.return_value._prior_briefing_key.return_value = ("2026-02-16-PM", "AI_ML")
+    mock_archive_cls.return_value.get_prior.return_value = None
+    mock_signal_cls.return_value.get_signals.return_value = [
+        {"signal_key": "eval-crisis", "mention_count": 5}
+    ]
+
+    handler_mod.lambda_handler(_sqs_event(stories=stories), {})
+
+    _, kwargs = mock_synth_cls.return_value.synthesize.call_args
+    signals_arg = kwargs.get("signals") if "signals" in kwargs else mock_synth_cls.return_value.synthesize.call_args[0][1]
+    assert signals_arg[0]["coverage_phrase"] == "first appeared today"
+
+
+@patch("src.handlers.briefing_handler.BriefingArchive")
+@patch("src.handlers.briefing_handler.SignalTracker")
+@patch("src.handlers.briefing_handler.BriefingSynthesizer")
+@patch("src.handlers.briefing_handler._post_to_site")
+@patch("src.handlers.briefing_handler.boto3")
+@patch("src.handlers.briefing_handler.Settings")
 def test_archive_written_after_publish(
     mock_settings_cls, mock_boto3, mock_post_to_site, mock_synth_cls,
     mock_signal_cls, mock_archive_cls,
