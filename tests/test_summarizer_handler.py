@@ -6,6 +6,43 @@ import src.handlers.summarizer_handler as handler_mod
 from src.services.editorial_scorer import ScoringResult
 
 
+def test_compute_source_tier_arxiv_abs_url():
+    assert handler_mod._compute_source_tier(
+        "https://arxiv.org/abs/2606.09894", ""
+    ) == "arxiv"
+
+
+def test_compute_source_tier_arxiv_pdf_url_with_version():
+    assert handler_mod._compute_source_tier(
+        "https://export.arxiv.org/pdf/2606.09894v2", ""
+    ) == "arxiv"
+
+
+def test_compute_source_tier_press_writeup_citing_preprint():
+    assert handler_mod._compute_source_tier(
+        "https://arstechnica.com/science/some-article/",
+        "...researchers say... arXiv:2606.09894 describes the method...",
+    ) == "arxiv"
+
+
+def test_compute_source_tier_erdos_case_no_arxiv_id():
+    assert handler_mod._compute_source_tier(
+        "https://arstechnica.com/science/some-article/",
+        "...OpenAI disproved the Erdős unit distance conjecture, Gowers said...",
+    ) == "secondary"
+
+
+def test_compute_source_tier_empty_inputs():
+    assert handler_mod._compute_source_tier("", "") == "secondary"
+
+
+def test_compute_source_tier_missing_keys_via_get_defaults():
+    item = {}
+    assert handler_mod._compute_source_tier(
+        item.get("url", ""), item.get("content", "")
+    ) == "secondary"
+
+
 def _sqs_event(briefing_type="AI_ML", hashes=("h1",), briefing_date="2026-02-17-AM"):
     body = json.dumps({
         "briefing_type": briefing_type,
@@ -94,6 +131,34 @@ def test_passes_stories_sent_to_briefing_queue(
     assert body["briefing_date"] == "2026-02-17-AM"
     assert "stories" in body
     assert "candidate_count" in body
+
+
+@patch("src.handlers.summarizer_handler.NewsBlurClient")
+@patch("src.handlers.summarizer_handler.RaindropClient")
+@patch("src.handlers.summarizer_handler.EditorialScorer")
+@patch("src.handlers.summarizer_handler.StoryStaging")
+@patch("src.handlers.summarizer_handler.boto3")
+@patch("src.handlers.summarizer_handler.Settings")
+def test_source_tier_included_in_briefing_payload(
+    mock_settings_cls, mock_boto3, mock_staging_cls, mock_scorer_cls,
+    mock_raindrop_cls, mock_nb_cls,
+):
+    mock_settings_cls.return_value = _default_settings()
+    items = [_make_item(f"h{i}") for i in range(5)]
+    items[0]["url"] = "https://arxiv.org/abs/2606.09894"
+    items[1]["url"] = "https://arstechnica.com/science/some-article/"
+    items[1]["content"] = "OpenAI disproved the Erdős unit distance conjecture, Gowers said."
+    mock_staging_cls.return_value.batch_get_stories.return_value = items
+    mock_scorer_cls.return_value.score.return_value = _pass_result()
+    mock_raindrop_cls.return_value.update_bookmark.return_value = {}
+
+    handler_mod.lambda_handler(_sqs_event(hashes=[f"h{i}" for i in range(5)]), {})
+
+    sqs_mock = mock_boto3.client.return_value
+    body = json.loads(sqs_mock.send_message.call_args[1]["MessageBody"])
+    stories_by_hash = {s["story_hash"]: s for s in body["stories"]}
+    assert stories_by_hash["h0"]["source_tier"] == "arxiv"
+    assert stories_by_hash["h1"]["source_tier"] == "secondary"
 
 
 @patch("src.handlers.summarizer_handler.NewsBlurClient")
