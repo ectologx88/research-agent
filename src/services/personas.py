@@ -28,11 +28,11 @@ SOURCE_EMOJI: dict[str, str] = {
 _SOURCE_TIER_INSTRUCTION = (
     '`source_tier == "secondary"`: this story has no arXiv-citable artifact. '
     "When linking this story inline on first mention, append the marker "
-    "`[no arXiv artifact]` immediately after the link — this is part of the "
-    "mandatory inline-link rendering, not optional decoration. Additionally, "
-    "attribute extraordinary, quantitative, or surprising claims explicitly to "
-    'the reporting outlet (e.g., "according to [Outlet], not yet corroborated '
-    'by a published paper") rather than stating them as established fact — '
+    '`[no arXiv artifact]` immediately after the link; this marker is part of '
+    "the mandatory inline-link rendering, not optional decoration. Attribute "
+    "extraordinary, quantitative, or surprising claims explicitly to the "
+    'reporting outlet (e.g., "according to [Outlet], not yet corroborated by '
+    'a published paper") rather than stating them as established fact, '
     "regardless of `integrity` score. Both the marker and the attribution "
     "framing are independent of and additional to the `integrity <= 2` flag "
     "and `SOURCE_EMOJI`."

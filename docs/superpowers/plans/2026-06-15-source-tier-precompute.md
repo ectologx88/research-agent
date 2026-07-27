@@ -4,9 +4,9 @@
 
 **Goal:** Add a deterministic `source_tier` field (`"arxiv"` | `"secondary"`) to each scored story, computed by regex from the story's URL and content, and instruct both personas to render a `[no arXiv artifact]` marker plus attribution framing for `"secondary"`-tier stories.
 
-**Architecture:** A new pure module-level helper `_compute_source_tier(url, content) -> str` in `src/handlers/summarizer_handler.py` searches `f"{url}\n{content}"` for an arXiv ID (URL form or bare `arXiv:YYMM.NNNNN` citation) using a compiled regex `_ARXIV_ID_PATTERN`. `_score_story()` calls it and adds `"source_tier"` to its return dict, which flows unchanged through SQS to the briefing Lambda and into `_dumps(stories)` in `src/services/personas.py`. Both `_EQUALIZER_SYSTEM` and `_ZEITGEIST_SYSTEM` get an additive instruction block (verbatim, identical text) telling the persona how to render `secondary`-tier stories.
+**Architecture:** A new pure module-level helper `_compute_source_tier(url, content) -> str` in `src/handlers/summarizer_handler.py` searches `url` and `content` separately for an arXiv ID (URL form or bare `arXiv:YYMM.NNNNN` citation) using a compiled regex `_ARXIV_ID_PATTERN`. `_score_story()` calls it and adds `"source_tier"` to its return dict, which flows unchanged through SQS to the briefing Lambda and into `_dumps(stories)` in `src/services/personas.py`. Both `_EQUALIZER_SYSTEM` and `_ZEITGEIST_SYSTEM` get an additive instruction block (verbatim, identical text) telling the persona how to render `secondary`-tier stories.
 
-**Tech Stack:** Python 3.14, pytest, unittest.mock, `re` (stdlib) — no new dependencies.
+**Tech Stack:** Python 3.12, pytest, unittest.mock, `re` (stdlib) — no new dependencies.
 
 ---
 

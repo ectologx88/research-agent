@@ -35,7 +35,7 @@ def _compute_source_tier(url: str, content: str) -> str:
     own URL points to a press writeup. No match degrades to "secondary",
     the more conservative tier.
     """
-    if _ARXIV_ID_PATTERN.search(f"{url}\n{content}"):
+    if _ARXIV_ID_PATTERN.search(url or "") or _ARXIV_ID_PATTERN.search(content or ""):
         return "arxiv"
     return "secondary"
 
