@@ -4,7 +4,7 @@
 Usage:
     DRY_RUN=true python scripts/dry_run.py
 
-Loads credentials from AWS SSM (seth-dev profile), invokes triage handler
+Loads credentials from AWS SSM (ri-prod profile), invokes triage handler
 with DRY_RUN=true, prints routing report and Lambda 2 mock scoring summary.
 """
 import os
@@ -27,7 +27,7 @@ from config.scoring_weights import (
 from collections import Counter, defaultdict
 
 
-AWS_PROFILE = "seth-dev"
+AWS_PROFILE = "ri-prod"
 SSM_PREFIX = "/prod/ResearchAgent/"
 
 

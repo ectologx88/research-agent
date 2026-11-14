@@ -126,7 +126,7 @@ def load_module_from_file(path: str, module_name: str):
 
 def main():
     model_id = "us.anthropic.claude-sonnet-4-6"
-    session = boto3.Session(profile_name="seth-dev")
+    session = boto3.Session(profile_name="ri-prod")
     bedrock = session.client(
         "bedrock-runtime",
         region_name="us-east-1",
