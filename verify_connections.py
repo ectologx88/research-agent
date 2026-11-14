@@ -6,7 +6,7 @@ import requests
 from pyzotero import zotero
 
 
-AWS_PROFILE = "seth-dev"
+AWS_PROFILE = "ri-prod"
 AWS_REGION = "us-east-1"
 SSM_PREFIX = "/prod/ResearchAgent/"
 SSM_KEYS = {

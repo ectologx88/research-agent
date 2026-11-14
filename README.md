@@ -112,4 +112,4 @@ python verify_connections.py
 pytest tests/ -v
 ```
 
-Requires Python 3.12+, AWS CLI configured with `seth-dev` profile, and Bedrock model access in `us-east-1` for both Haiku and Sonnet 4.5.
+Requires Python 3.12+, AWS CLI configured with `ri-prod` profile, and Bedrock model access in `us-east-1` for both Haiku and Sonnet 4.5.

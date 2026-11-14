@@ -9,7 +9,7 @@ terraform {
 
 provider "aws" {
   region  = "us-east-1"
-  profile = "seth-dev"
+  profile = "ri-prod"
 }
 
 data "aws_ssm_parameter" "newsblur_user" {

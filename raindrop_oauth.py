@@ -10,7 +10,7 @@ import webbrowser
 import boto3
 import requests
 
-AWS_PROFILE = "seth-dev"
+AWS_PROFILE = "ri-prod"
 AWS_REGION = "us-east-1"
 SSM_PREFIX = "/prod/ResearchAgent/"
 REDIRECT_PORT = 19274
